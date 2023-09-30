@@ -5,6 +5,7 @@ if Project "axiom" then
         "nova",
         "meshoptimizer",
         "fastgltf",
+        "stb",
     }
     Artifact { "out/main", type = "Console" }
 end
