@@ -10,6 +10,6 @@ namespace axiom
 
         GltfImporter(Scene& scene);
 
-        void Import(std::filesystem::path gltf);
+        void Import(std::filesystem::path gltf, std::optional<std::string_view> scene = {});
     };
 }

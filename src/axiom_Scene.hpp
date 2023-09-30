@@ -12,7 +12,7 @@ namespace axiom
         Vec2 uv;
     };
 
-    struct TriangleMesh : nova::RefCounted
+    struct TriMesh : nova::RefCounted
     {
         std::vector<Vertex> vertices;
         std::vector<u32>     indices;
@@ -24,7 +24,7 @@ namespace axiom
         std::vector<b8> data;
     };
 
-    struct PbrMaterial : nova::RefCounted
+    struct UVMaterial : nova::RefCounted
     {
         nova::Ref<TextureMap>    albedo;
         nova::Ref<TextureMap>     alpha;
@@ -37,15 +37,16 @@ namespace axiom
         bool subsurface = false;
     };
 
-    struct MeshInstance : nova::RefCounted
+    struct TriMeshInstance : nova::RefCounted
     {
-        nova::Ref<TriangleMesh>    mesh;
-        nova::Ref<PbrMaterial> material;
-        nova::Trs             transform;
+        nova::Ref<TriMesh>    mesh;
+        nova::Ref<UVMaterial> material;
+        nova::Mat4            transform;
     };
 
     struct Scene
     {
-        std::vector<nova::Ref<MeshInstance>> instances;
+        std::vector<nova::Ref<TriMesh>>            meshes;
+        std::vector<nova::Ref<TriMeshInstance>> instances;
     };
 }
