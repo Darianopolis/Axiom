@@ -1,10 +1,24 @@
-#include "axiom_GltfImporter.hpp"
+#include "axiom_Importer.hpp"
 
 #include <fastgltf/parser.hpp>
 #include <fastgltf/glm_element_traits.hpp>
 
 namespace axiom
 {
+    struct GltfImporter : Importer
+    {
+        Scene* scene;
+
+        GltfImporter(Scene& scene);
+
+        virtual void Import(std::filesystem::path gltf, std::optional<std::string_view> scene = {});
+    };
+
+    nova::Ref<Importer> CreateGltfImporter(Scene& scene)
+    {
+        return nova::Ref<GltfImporter>::Create(scene);
+    }
+
     GltfImporter::GltfImporter(Scene& _scene)
         : scene(&_scene)
     {}

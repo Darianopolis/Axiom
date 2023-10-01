@@ -1,5 +1,5 @@
 #include "axiom_Scene.hpp"
-#include "axiom_GltfImporter.hpp"
+#include "axiom_Importer.hpp"
 #include "axiom_Renderer.hpp"
 
 #include <nova/rhi/nova_RHI.hpp>
@@ -29,8 +29,8 @@ int main(int argc, char* argv[])
 
     axiom::Scene scene;
 
-    axiom::GltfImporter importer{ scene };
-    importer.Import(path);
+    auto importer = axiom::CreateGltfImporter(scene);
+    importer->Import(path);
 
 // -----------------------------------------------------------------------------
     NOVA_TIMEIT("load-scene");
