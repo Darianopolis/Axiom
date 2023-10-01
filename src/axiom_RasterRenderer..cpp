@@ -20,7 +20,7 @@ namespace axiom
 
 // -----------------------------------------------------------------------------
 
-    struct DebugRasterRenderer : Renderer
+    struct RasterRenderer : Renderer
     {
         Scene* scene = nullptr;
 
@@ -42,28 +42,28 @@ namespace axiom
 
         Mat4 viewProj;
 
-        DebugRasterRenderer();
-        ~DebugRasterRenderer();
+        RasterRenderer();
+        ~RasterRenderer();
 
-        virtual void CompileScene(Scene& scene);
+        virtual void CompileScene(Scene& scene, nova::CommandPool cmdPool, nova::Fence fence);
 
         virtual void SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov);
-        virtual void Record(nova::CommandList cmd, nova::Texture target);
+        virtual void Record(nova::CommandList cmd, nova::Texture target, u32 targetIdx);
     };
 
-    nova::Ref<Renderer> CreateDebugRasterRenderer(nova::Context context)
+    nova::Ref<Renderer> CreateRasterRenderer(nova::Context context)
     {
-        auto renderer = nova::Ref<DebugRasterRenderer>::Create();
+        auto renderer = nova::Ref<RasterRenderer>::Create();
         renderer->context = context;
         return renderer;
     }
 
-    DebugRasterRenderer::DebugRasterRenderer()
+    RasterRenderer::RasterRenderer()
     {
 
     }
 
-    DebugRasterRenderer::~DebugRasterRenderer()
+    RasterRenderer::~RasterRenderer()
     {
         vertexBuffer.Destroy();
         indexBuffer.Destroy();
@@ -76,8 +76,11 @@ namespace axiom
         depthImage.Destroy();
     }
 
-    void DebugRasterRenderer::CompileScene(Scene& _scene)
+    void RasterRenderer::CompileScene(Scene& _scene, nova::CommandPool cmdPool, nova::Fence fence)
     {
+        (void)cmdPool;
+        (void)fence;
+
         scene = &_scene;
 
         u64 vertexCount = 0;
@@ -196,7 +199,7 @@ namespace axiom
             )glsl"}));
     }
 
-    void DebugRasterRenderer::SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov)
+    void RasterRenderer::SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov)
     {
         auto proj = ProjInfReversedZRH(fov, aspect, 0.01f);
         auto mTranslation = glm::translate(glm::mat4(1.f), position);
@@ -205,8 +208,10 @@ namespace axiom
         viewProj = proj * view;
     }
 
-    void DebugRasterRenderer::Record(nova::CommandList cmd, nova::Texture target)
+    void RasterRenderer::Record(nova::CommandList cmd, nova::Texture target, u32 targetIdx)
     {
+        (void)targetIdx;
+
         if (!depthImage || depthImage.GetExtent() != target.GetExtent()) {
             depthImage.Destroy();
 

@@ -14,6 +14,8 @@ namespace axiom
         GltfImporter& importer;
         std::unique_ptr<fastgltf::Asset> asset;
 
+        std::vector<nova::Ref<TriMesh>> meshes;
+
 #ifdef AXIOM_TRACE_IMPORT // ---------------------------------------------------
         u32 debugLongestNodeName;
 #endif // ----------------------------------------------------------------------
@@ -71,7 +73,7 @@ namespace axiom
             NOVA_THROW("Error loading [{}] Message: {}", gltf.string(), fastgltf::getErrorMessage(res.error()));
         }
 
-        GltfImporterImpl impl{*this};
+        GltfImporterImpl impl{ *this };
 
         impl.asset = std::make_unique<fastgltf::Asset>(std::move(res.get()));
 
@@ -138,6 +140,7 @@ namespace axiom
 
         auto outMesh = nova::Ref<TriMesh>::Create();
         importer.scene->meshes.emplace_back(outMesh);
+        meshes.emplace_back(outMesh);
         outMesh->vertices.resize(vertexCount);
         outMesh->indices.resize(indexCount);
 
@@ -243,7 +246,7 @@ namespace axiom
             NOVA_LOG("  - Mesh Instance: {:>{}} -> {}", node.name, debugLongestNodeName, asset->meshes[node.meshIndex.value()].name);
 #endif // ----------------------------------------------------------------------
             importer.scene->instances.emplace_back(
-                new TriMeshInstance{ {}, importer.scene->meshes[node.meshIndex.value()], nullptr, transform });
+                new TriMeshInstance{ {}, meshes[node.meshIndex.value()], nullptr, transform });
         }
 
         for (auto& childIndex : node.children) {

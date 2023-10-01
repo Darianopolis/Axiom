@@ -38,7 +38,8 @@ int main(int argc, char* argv[])
 // -----------------------------------------------------------------------------
 
     auto context = nova::Context::Create({
-        .debug = true,
+        .debug = false,
+        .rayTracing = true,
     });
     auto queue = context.GetQueue(nova::QueueFlags::Graphics, 0);
     auto fence = nova::Fence::Create(context);
@@ -57,8 +58,8 @@ int main(int argc, char* argv[])
     NOVA_LOG("Compiling scene...");
 // -----------------------------------------------------------------------------
 
-    auto renderer = axiom::CreateDebugRasterRenderer(context);
-    renderer->CompileScene(scene);
+    auto renderer = axiom::CreatePathTraceRenderer(context);
+    renderer->CompileScene(scene, cmdPool, fence);
 
 // -----------------------------------------------------------------------------
     NOVA_TIMEIT("compile-scene");
@@ -181,10 +182,15 @@ int main(int argc, char* argv[])
 
         renderer->SetCamera(position, rotation,
             f32(swapchain.GetExtent().x) / f32(swapchain.GetExtent().y), glm::radians(90.f));
-        renderer->Record(cmd, swapchain.GetCurrent());
+
+        cmd.BindDescriptorHeap(nova::BindPoint::Graphics, heap);
+        cmd.BindDescriptorHeap(nova::BindPoint::Compute, heap);
+        cmd.BindDescriptorHeap(nova::BindPoint::RayTracing, heap);
+        heap.WriteStorageTexture(0, swapchain.GetCurrent());
+
+        renderer->Record(cmd, swapchain.GetCurrent(), 0);
 
         cmd.Present(swapchain);
-
         queue.Submit({cmd}, {fence}, {fence});
         queue.Present({swapchain}, {fence});
     }

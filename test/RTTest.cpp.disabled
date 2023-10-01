@@ -345,7 +345,6 @@ struct Application
             // ModelInfo{ "D:/Dev/Projects/pyrite/pyrite-v4/assets/models/Sponza/NewSponza_Main_Blender_glTF.gltf" },
         };
 
-NOVA_DEBUG();
         {
             fastgltf::Parser parser{
                 fastgltf::Extensions::KHR_texture_transform
@@ -371,25 +370,21 @@ NOVA_DEBUG();
                 data.loadFromFile(info.path);
                 auto baseDir = info.path.parent_path();
 
-NOVA_DEBUG();
                 constexpr auto gltfOptions =
                     fastgltf::Options::DontRequireValidAssetMember
                     | fastgltf::Options::AllowDouble
                     | fastgltf::Options::LoadGLBBuffers
                     | fastgltf::Options::LoadExternalBuffers;
 
-NOVA_DEBUG();
                 info.asset = std::make_shared<fastgltf::Asset>(std::move(
                     fastgltf::determineGltfFileType(&data) == fastgltf::GltfType::glTF
                         ? parser.loadGLTF(&data, baseDir, gltfOptions).get()
                         : parser.loadBinaryGLTF(&data, baseDir, gltfOptions).get()));
-NOVA_DEBUG();
             }
         }
 
 // -----------------------------------------------------------------------------
 
-NOVA_DEBUG();
         usz totalVertexCount = 0;
         usz totalIndexCount = 0;
 
@@ -412,19 +407,16 @@ NOVA_DEBUG();
             }
         }
 
-NOVA_DEBUG();
         NOVA_LOGEXPR(totalVertexCount);
         if (totalVertexCount > UINT32_MAX)
             NOVA_THROW("Vertex count too large");
         vertexCount = u32(totalVertexCount);
 
-NOVA_DEBUG();
         NOVA_LOGEXPR(totalIndexCount);
         if (totalIndexCount > UINT32_MAX)
             NOVA_THROW("Index count too large");
         indexCount = u32(totalIndexCount);
 
-NOVA_DEBUG();
 // -----------------------------------------------------------------------------
 
         vertexBuffer = nova::Buffer::Create(context, sizeof(Vertex) * vertexCount,
@@ -433,19 +425,16 @@ NOVA_DEBUG();
             | nova::BufferUsage::TransferDst,
             nova::BufferFlags::DeviceLocal);
 
-NOVA_DEBUG();
         indexBuffer = nova::Buffer::Create(context, sizeof(u32) * indexCount,
             nova::BufferUsage::Index
             | nova::BufferUsage::AccelBuild
             | nova::BufferUsage::TransferDst,
             nova::BufferFlags::DeviceLocal);
 
-NOVA_DEBUG();
         auto staging = nova::Buffer::Create(context, std::max(vertexBuffer.GetSize(), indexBuffer.GetSize()),
             nova::BufferUsage::TransferSrc,
             nova::BufferFlags::Mapped);
         NOVA_CLEANUP(&) { staging.Destroy(); };
-NOVA_DEBUG();
 
 // -----------------------------------------------------------------------------
 
@@ -470,7 +459,6 @@ NOVA_DEBUG();
                     }
                 }
             }
-NOVA_DEBUG();
 
             auto cmd = cmdPool.Begin();
             cmd.CopyToBuffer(vertexBuffer, staging, vertexBuffer.GetSize());
@@ -478,7 +466,6 @@ NOVA_DEBUG();
             fence.Wait();
         }
 
-NOVA_DEBUG();
 // -----------------------------------------------------------------------------
 
         {
@@ -510,14 +497,12 @@ NOVA_DEBUG();
                     meshes[meshIndex++].maxVertex = highestVertexOffset;
                 }
             }
-NOVA_DEBUG();
 
             auto cmd = cmdPool.Begin();
             cmd.CopyToBuffer(indexBuffer, staging, indexBuffer.GetSize());
             queue.Submit({cmd}, {}, {fence});
             fence.Wait();
         }
-NOVA_DEBUG();
 // -----------------------------------------------------------------------------
 
         auto builder = nova::AccelerationStructureBuilder::Create(context);
