@@ -7,9 +7,10 @@ namespace axiom
     struct Vertex
     {
         Vec3 position;
-        Vec3 normal;
-        Vec4 tangent;
-        Vec2 uv;
+        Vec3   normal;
+        Vec4  tangent;
+        Vec2 texCoord;
+        i32  matIndex;
     };
 
     struct TriMesh : nova::RefCounted
@@ -26,11 +27,12 @@ namespace axiom
 
     struct UVMaterial : nova::RefCounted
     {
-        nova::Ref<TextureMap>    albedo;
-        nova::Ref<TextureMap>     alpha;
-        nova::Ref<TextureMap>   normals;
-        nova::Ref<TextureMap> roughness;
-        nova::Ref<TextureMap> metalness;
+        nova::Ref<TextureMap>             albedo;
+        nova::Ref<TextureMap>              alpha;
+        nova::Ref<TextureMap>            normals;
+        nova::Ref<TextureMap>         emissivity;
+        nova::Ref<TextureMap>       transmission;
+        nova::Ref<TextureMap> metalnessRoughness;
 
         f32 alphaCutoff = -1.f;
         bool       thin = false;

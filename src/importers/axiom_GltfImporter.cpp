@@ -3,6 +3,8 @@
 #include <fastgltf/parser.hpp>
 #include <fastgltf/glm_element_traits.hpp>
 
+#include <stb_image.h>
+
 namespace axiom
 {
     struct GltfImporter : Importer
@@ -26,9 +28,15 @@ namespace axiom
     struct GltfImporterImpl
     {
         GltfImporter& importer;
+
+        std::filesystem::path baseDir;
         std::unique_ptr<fastgltf::Asset> asset;
 
-        std::vector<nova::Ref<TriMesh>> meshes;
+        std::vector<nova::Ref<TriMesh>>       meshes;
+        std::vector<nova::Ref<TextureMap>>  textures;
+        std::vector<nova::Ref<UVMaterial>> materials;
+
+        nova::HashMap<u32, u32> singlePixelTextures;
 
 #ifdef AXIOM_TRACE_IMPORT // ---------------------------------------------------
         u32 debugLongestNodeName;
@@ -38,8 +46,10 @@ namespace axiom
         void ProcessMesh(const fastgltf::Mesh& mesh);
 
         void ProcessTextures();
+        void ProcessTexture(u32 index, fastgltf::Texture& texture);
 
         void ProcessMaterials();
+        void ProcessMaterial(u32 index, fastgltf::Material& material);
 
         void ProcessScene(const fastgltf::Scene& scene);
         void ProcessNode(const fastgltf::Node& node, Mat4 parentTransform);
@@ -89,11 +99,13 @@ namespace axiom
 
         GltfImporterImpl impl{ *this };
 
+        impl.baseDir = std::move(baseDir);
         impl.asset = std::make_unique<fastgltf::Asset>(std::move(res.get()));
 
         impl.ProcessMeshes();
         impl.ProcessTextures();
         impl.ProcessMaterials();
+
         if (sceneName) {
             for (auto& gltfScene : impl.asset->scenes) {
                 if (gltfScene.name == *sceneName) {
@@ -114,7 +126,7 @@ namespace axiom
     void GltfImporterImpl::ProcessMeshes()
     {
 #ifdef AXIOM_TRACE_IMPORT // ---------------------------------------------------
-        NOVA_LOG("Processing {} meshes...", asset->meshes.size());
+        NOVA_LOG("Loading {} meshes...", asset->meshes.size());
 #endif // ----------------------------------------------------------------------
 
         for (auto& mesh : asset->meshes) {
@@ -160,6 +172,7 @@ namespace axiom
 
         for (auto& prim : primitives) {
 
+
             // Indices
             auto& indices = asset->accessors[prim->indicesAccessor.value()];
             fastgltf::iterateAccessorWithIndex<u32>(*asset,
@@ -196,8 +209,16 @@ namespace axiom
             if (auto texCoords = prim->findAttribute("TEXCOORD_0"); texCoords != prim->attributes.end()) {
                 fastgltf::iterateAccessorWithIndex<Vec2>(*asset,
                     asset->accessors[texCoords->second], [&](Vec2 texCoord, usz index) {
-                        outMesh->vertices[vertexOffset + index].uv = texCoord;
+                        outMesh->vertices[vertexOffset + index].texCoord = texCoord;
                     });
+            }
+
+            // MatIndex
+            {
+                i32 matIndex = i32(prim->materialIndex.value_or(-1));
+                for (u32 i = 0; i < positions.count; ++i) {
+                    outMesh->vertices[vertexOffset + i].matIndex = matIndex;
+                }
             }
 
             vertexOffset += positions.count;
@@ -207,18 +228,175 @@ namespace axiom
 
     void GltfImporterImpl::ProcessTextures()
     {
+#ifdef AXIOM_TRACE_IMPORT // ---------------------------------------------------
+        NOVA_LOG("Loading {} textures...", asset->textures.size());
+#endif // ----------------------------------------------------------------------
+        textures.resize(asset->textures.size());
+#pragma omp parallel for
+        for (u32 i = 0; i < asset->textures.size(); ++i) {
+            ProcessTexture(i, asset->textures[i]);
+        }
+    }
 
+    void GltfImporterImpl::ProcessTexture(u32 index, fastgltf::Texture& texture)
+    {
+        auto outTexture = nova::Ref<TextureMap>::Create();
+        textures[index] = outTexture;
+
+        if (texture.imageIndex) {
+            int width, height, channels;
+            stbi_uc* imageData = nullptr;
+
+            auto& gltfImage = asset->images[texture.imageIndex.value()];
+
+            std::visit(nova::Overloads {
+                [&](fastgltf::sources::URI& uri) {
+                    auto path = std::format("{}/{}", baseDir.string(), uri.uri.path());
+#ifdef AXIOM_TRACE_IMPORT // ---------------------------------------------------
+                    NOVA_LOG("  Texture[{}] = File[{}]", index, path);
+#endif // ----------------------------------------------------------------------
+                    imageData = stbi_load(
+                        path.c_str(),
+                        &width, &height, &channels, STBI_rgb_alpha);
+                    if (!imageData)
+                        NOVA_LOG("STB Failed to load image: {}", path);
+                },
+                [&](fastgltf::sources::Vector& vec) {
+                    imageData = stbi_load_from_memory(
+                        vec.bytes.data(), u32(vec.bytes.size()),
+                        &width, &height, &channels, STBI_rgb_alpha);
+                },
+                [&](fastgltf::sources::ByteView& byteView) {
+                    imageData = stbi_load_from_memory(
+                        reinterpret_cast<const unsigned char*>(byteView.bytes.data()), u32(byteView.bytes.size()),
+                        &width, &height, &channels, STBI_rgb_alpha);
+                },
+                [&](fastgltf::sources::BufferView& bufferViewIdx) {
+                    auto& view = asset->bufferViews[bufferViewIdx.bufferViewIndex];
+                    auto& buffer = asset->buffers[view.bufferIndex];
+                    auto* bytes = fastgltf::DefaultBufferDataAdapter{}(buffer) + view.byteOffset;
+
+                    imageData = stbi_load_from_memory(
+                        reinterpret_cast<const unsigned char*>(bytes), u32(view.byteLength),
+                        &width, &height, &channels, STBI_rgb_alpha);
+                },
+                [&](auto&) {},
+            }, gltfImage.data);
+
+            if (imageData) {
+                constexpr u32 MaxSize = 1024;
+
+                if (width > MaxSize || height > MaxSize) {
+                    u32 uWidth = u32(width);
+                    u32 uHeight = u32(height);
+                    u32 factor = std::max(width / MaxSize, height / MaxSize);
+                    u32 sWidth = uWidth / factor;
+                    u32 sHeight = uHeight / factor;
+                    u32 factor2 = factor * factor;
+                    auto getIndex = [](u32 x, u32 y, u32 pitch) {
+                        return x + y * pitch;
+                    };
+
+                    outTexture->data.resize(sWidth * sHeight * 4);
+                    outTexture->size = Vec2U(sWidth, sHeight);
+                    for (u32 x = 0; x < sWidth; ++x) {
+                        for (u32 y = 0; y < sHeight; ++y) {
+                            u32 r = 0, g = 0, b = 0, a = 0;
+                            for (u32 dx = 0; dx < factor; ++dx) {
+                                for (u32 dy = 0; dy < factor; ++dy) {
+                                    auto* pixel = imageData + getIndex(x * factor + dx, y * factor + dy, uWidth) * 4;
+                                    r += pixel[0];
+                                    g += pixel[1];
+                                    b += pixel[2];
+                                    a += pixel[3];
+                                }
+                            }
+
+                            auto* pixel = outTexture->data.data() + getIndex(x, y, sWidth) * 4;
+                            pixel[0] = b8(r / factor2);
+                            pixel[1] = b8(g / factor2);
+                            pixel[2] = b8(b / factor2);
+                            pixel[3] = b8(a / factor2);
+                        }
+                    }
+                } else {
+                    auto pData = reinterpret_cast<const std::byte*>(imageData);
+                    outTexture->data.assign(pData, pData + (width * height * 4));
+                    outTexture->size = Vec2U(u32(width), u32(height));
+                }
+
+                stbi_image_free(imageData);
+            }
+        }
+
+        if (outTexture->data.empty()) {
+            outTexture->data.resize(4);
+            outTexture->data[0] = b8(255);
+            outTexture->data[1] = b8(255);
+            outTexture->data[2] = b8(255);
+            outTexture->data[3] = b8(255);
+            outTexture->size = Vec2U(1, 1);
+        }
     }
 
     void GltfImporterImpl::ProcessMaterials()
     {
+        for (u32 i = 0; i < asset->materials.size(); ++i) {
+            ProcessMaterial(i, asset->materials[i]);
+        }
+    }
 
+    void GltfImporterImpl::ProcessMaterial(u32 index, fastgltf::Material& material)
+    {
+        (void)index;
+
+        auto outMaterial = nova::Ref<UVMaterial>::Create();
+        materials.emplace_back(outMaterial);
+
+        auto getImage = [&](
+                const std::optional<fastgltf::TextureInfo>& texture,
+                Span<f32> factor) {
+
+            if (texture) {
+                return textures[material.pbrData.baseColorTexture->textureIndex];
+            }
+
+            std::array<u8, 4> data { 0, 0, 0, 255 };
+            for (u32 j = 0; j < factor.size(); ++j)
+                data[j] = u8(factor[j] * 255.f);
+
+            u32 encoded = std::bit_cast<u32>(data);
+
+            if (singlePixelTextures.contains(encoded)) {
+                return textures[singlePixelTextures.at(encoded)];
+            }
+
+            auto image = Ref<TextureMap>::Create();
+            image->size = Vec2(1);
+            image->data = { b8(data[0]), b8(data[1]), b8(data[2]), b8(data[3]) };
+
+            return image;
+        };
+
+        auto& pbr = material.pbrData;
+
+        outMaterial->albedo = getImage(pbr.baseColorTexture, pbr.baseColorFactor);
+        outMaterial->metalnessRoughness = getImage(pbr.metallicRoughnessTexture,
+            { pbr.metallicFactor, pbr.roughnessFactor });
+
+        outMaterial->normals = getImage(material.normalTexture, { 0.5f, 0.5f, 1.f });
+        outMaterial->emissivity = getImage(material.emissiveTexture, material.emissiveFactor);
+
+        if (material.transmission) {
+            outMaterial->transmission = getImage(
+                material.transmission->transmissionTexture, { material.transmission->transmissionFactor });
+        }
     }
 
     void GltfImporterImpl::ProcessScene(const fastgltf::Scene& scene)
     {
 #ifdef AXIOM_TRACE_IMPORT // ---------------------------------------------------
-        NOVA_LOG("Processing scene {}...", scene.name);
+        NOVA_LOG("Processing scene [{}]...", scene.name);
 
         debugLongestNodeName = 0;
         for (auto nodeIdx : scene.nodeIndices) {
