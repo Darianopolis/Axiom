@@ -1,6 +1,6 @@
 #include "axiom_Scene.hpp"
 #include "axiom_GltfImporter.hpp"
-#include "axiom_DebugRenderer.hpp"
+#include "axiom_Renderer.hpp"
 
 #include <nova/rhi/nova_RHI.hpp>
 #include <nova/rhi/vulkan/nova_VulkanRHI.hpp>
@@ -10,6 +10,8 @@
 #endif
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
+
+using namespace nova::types;
 
 int main(int argc, char* argv[])
 {
@@ -22,6 +24,7 @@ int main(int argc, char* argv[])
 
 // -----------------------------------------------------------------------------
     NOVA_LOG("Loading scene: {}", path.string());
+    NOVA_TIMEIT_RESET();
 // -----------------------------------------------------------------------------
 
     axiom::Scene scene;
@@ -30,6 +33,7 @@ int main(int argc, char* argv[])
     importer.Import(path);
 
 // -----------------------------------------------------------------------------
+    NOVA_TIMEIT("load-scene");
     NOVA_LOG("Initializing nova::rhi");
 // -----------------------------------------------------------------------------
 
@@ -49,13 +53,15 @@ int main(int argc, char* argv[])
     };
 
 // -----------------------------------------------------------------------------
+    NOVA_TIMEIT("init-vulkan");
     NOVA_LOG("Compiling scene...");
 // -----------------------------------------------------------------------------
 
-    axiom::DebugRenderer renderer;
-    renderer.CompileScene(scene);
+    auto renderer = axiom::CreateDebugRasterRenderer(context);
+    renderer->CompileScene(scene);
 
 // -----------------------------------------------------------------------------
+    NOVA_TIMEIT("compile-scene");
     NOVA_LOG("Setting up window...");
 // -----------------------------------------------------------------------------
 
@@ -78,20 +84,104 @@ int main(int argc, char* argv[])
     };
 
 // -----------------------------------------------------------------------------
+    NOVA_TIMEIT("create-window");
     NOVA_LOG("Rendering scene...");
 // -----------------------------------------------------------------------------
+
+    Vec3 position{ 0.f, 0.f, 2.f };
+    Quat rotation{ Vec3(0.f) };
+    static f32 moveSpeed = 1.f;
+
+    auto lastUpdateTime = std::chrono::steady_clock::now();
+    auto lastReportTime = lastUpdateTime;
+    u64 frames = 0;
+    f32 fps = 0.f;
+
+    POINT savedPos{ 0, 0 };
+    bool lastMouseDrag = false;
+    f32 mouseSpeed = 0.0025f;
+
+    glfwSetScrollCallback(window, [](auto, f64, f64 dy) {
+        if (dy > 0) moveSpeed *= 1.5f;
+        if (dy < 0) moveSpeed /= 1.5f;
+    });
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
 
         fence.Wait();
 
+        // Time
+
+        using namespace std::chrono;
+        auto now = steady_clock::now();
+        auto timeStep = duration_cast<duration<f32>>(now - lastUpdateTime).count();
+        lastUpdateTime = now;
+
+        // FPS
+
+        frames++;
+        if (now - lastReportTime > 1s)
+        {
+            fps = frames / duration_cast<duration<f32>>(now - lastReportTime).count();
+            lastReportTime = now;
+            frames = 0;
+        }
+
+        // Camera
+
+        {
+            Vec3 translate = {};
+            if (glfwGetKey(window, GLFW_KEY_W))          translate += Vec3( 0.f,  0.f, -1.f);
+            if (glfwGetKey(window, GLFW_KEY_A))          translate += Vec3(-1.f,  0.f,  0.f);
+            if (glfwGetKey(window, GLFW_KEY_S))          translate += Vec3( 0.f,  0.f,  1.f);
+            if (glfwGetKey(window, GLFW_KEY_D))          translate += Vec3( 1.f,  0.f,  0.f);
+            if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT)) translate += Vec3( 0.f, -1.f,  0.f);
+            if (glfwGetKey(window, GLFW_KEY_SPACE))      translate += Vec3( 0.f,  1.f,  0.f);
+            if (translate.x || translate.y || translate.z) {
+                position += rotation * (glm::normalize(translate) * moveSpeed * timeStep);
+            }
+        }
+
+        {
+            Vec2 delta = {};
+            if (GetFocus() == glfwGetWin32Window(window) && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_2)) {
+                POINT p;
+                GetCursorPos(&p);
+                LONG dx = p.x - savedPos.x;
+                LONG dy = p.y - savedPos.y;
+                if (lastMouseDrag) {
+                    delta = { f32(dx), f32(dy) };
+                }
+                else {
+                    GetCursorPos(&savedPos);
+                    ShowCursor(false);
+                    lastMouseDrag = true;
+                }
+                SetCursorPos(savedPos.x, savedPos.y);
+            }
+            else if (lastMouseDrag) {
+                ShowCursor(true);
+                lastMouseDrag = false;
+            }
+
+            if ((delta.x || delta.y) && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_2)) {
+                rotation = glm::angleAxis(delta.x * mouseSpeed, Vec3(0.f, -1.f, 0.f)) * rotation;
+                rotation = rotation * glm::angleAxis(delta.y * mouseSpeed, Vec3(-1.f, 0.f, 0.f));
+                rotation = glm::normalize(rotation);
+            }
+        }
+
+        // Draw
+
         cmdPool.Reset();
         auto cmd = cmdPool.Begin();
 
         queue.Acquire({swapchain}, {fence});
 
-        renderer.Record(cmd, swapchain.GetCurrent());
+        renderer->SetCamera(position, rotation,
+            f32(swapchain.GetExtent().x) / f32(swapchain.GetExtent().y), glm::radians(90.f));
+        renderer->Record(cmd, swapchain.GetCurrent());
 
         cmd.Present(swapchain);
 

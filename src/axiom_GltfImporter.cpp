@@ -182,6 +182,9 @@ namespace axiom
                         outMesh->vertices[vertexOffset + index].uv = texCoord;
                     });
             }
+
+            vertexOffset += positions.count;
+            indexOffset += indices.count;
         }
     }
 
