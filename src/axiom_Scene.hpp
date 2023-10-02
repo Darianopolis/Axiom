@@ -19,20 +19,42 @@ namespace axiom
         std::vector<u32>     indices;
     };
 
+    enum class TextureFormat
+    {
+        RGBA8_Srgb,
+        RGBA8_Unorm,
+
+        RG_Unorm,
+    };
+
     struct TextureMap : nova::RefCounted
     {
         Vec2U           size;
+        TextureFormat format;
         std::vector<b8> data;
+    };
+
+    struct TextureChannel
+    {
+        nova::Ref<TextureMap>   map;
+        std::array<i32, 4> channels{ -1, -1, -1, -1 };
+
+        TextureChannel(nova::Ref<TextureMap> _map, Span<i32> _channels)
+            : map(std::move(_map))
+        {
+            std::copy(_channels.begin(), _channels.end(), channels.begin());
+        }
     };
 
     struct UVMaterial : nova::RefCounted
     {
-        nova::Ref<TextureMap>             albedo;
-        nova::Ref<TextureMap>              alpha;
-        nova::Ref<TextureMap>            normals;
-        nova::Ref<TextureMap>         emissivity;
-        nova::Ref<TextureMap>       transmission;
-        nova::Ref<TextureMap> metalnessRoughness;
+        TextureChannel       albedo;
+        TextureChannel        alpha;
+        TextureChannel      normals;
+        TextureChannel   emissivity;
+        TextureChannel transmission;
+        TextureChannel    metalness;
+        TextureChannel    roughness;
 
         f32 alphaCutoff = -1.f;
         bool       thin = false;

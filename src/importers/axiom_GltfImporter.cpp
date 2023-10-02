@@ -380,16 +380,23 @@ namespace axiom
 
         auto& pbr = material.pbrData;
 
-        outMaterial->albedo = getImage(pbr.baseColorTexture, pbr.baseColorFactor);
-        outMaterial->metalnessRoughness = getImage(pbr.metallicRoughnessTexture,
-            { pbr.metallicFactor, pbr.roughnessFactor });
+        auto albedoAlpha = getImage(pbr.baseColorTexture, pbr.baseColorFactor);
+        outMaterial->albedo = { albedoAlpha, { 0, 1, 2 } };
+        outMaterial->alpha = { albedoAlpha, { 3 } };
+        auto metalnessRoughness = getImage(pbr.metallicRoughnessTexture, { pbr.metallicFactor, pbr.roughnessFactor });
+        outMaterial->metalness = { metalnessRoughness, { 0 } };
+        outMaterial->roughness = { metalnessRoughness, { 1 } };
 
-        outMaterial->normals = getImage(material.normalTexture, { 0.5f, 0.5f, 1.f });
-        outMaterial->emissivity = getImage(material.emissiveTexture, material.emissiveFactor);
+
+        outMaterial->normals = { getImage(material.normalTexture, { 0.5f, 0.5f, 1.f }), { 0, 1, 2 } };
+        outMaterial->emissivity = { getImage(material.emissiveTexture, material.emissiveFactor), { 0, 1, 2 } };
 
         if (material.transmission) {
-            outMaterial->transmission = getImage(
-                material.transmission->transmissionTexture, { material.transmission->transmissionFactor });
+            outMaterial->transmission = {
+                getImage(material.transmission->transmissionTexture,
+                    { material.transmission->transmissionFactor }),
+                { 0 }
+            };
         }
     }
 
