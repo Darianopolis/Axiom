@@ -5,6 +5,8 @@
 #include <nova/rhi/nova_RHI.hpp>
 #include <nova/rhi/vulkan/nova_VulkanRHI.hpp>
 
+#include <nova/ui/nova_ImGui.hpp>
+
 #ifndef GLFW_EXPOSE_NATIVE_WIN32
 #define GLFW_EXPOSE_NATIVE_WIN32
 #endif
@@ -13,14 +15,31 @@
 
 using namespace nova::types;
 
+constexpr std::string_view UsageString =
+    "Usage: [options] \"path/to/scene.gltf\" \"scene name\"\n"
+    "options:\n"
+    "  --path-trace : Path tracing renderer\n"
+    "  --raster     : Raster renderer";
+
 int main(int argc, char* argv[])
 {
-    if (argc < 2) {
-        std::cout << "Usage: \"path/to/scene.gltf\" \"scene name\"";
+    if (argc < 3) {
+        std::cout << UsageString;
         return 1;
     }
 
-    std::filesystem::path path{ argv[1] };
+    auto type = std::string_view(argv[1]);
+    if (type != "--path-trace" && type != "--raster") {
+        std::cout << UsageString;
+        std::cout << "\nUnknown option [" << type << "]";
+        return 1;
+    }
+
+    std::filesystem::path path{ argv[2] };
+    if (!std::filesystem::exists(path)) {
+        NOVA_LOG("File not found: {}", path.string());
+        return -1;
+    }
 
 // -----------------------------------------------------------------------------
     NOVA_LOG("Loading scene: {}", path.string());
@@ -45,21 +64,30 @@ int main(int argc, char* argv[])
     auto fence = nova::Fence::Create(context);
     auto heap = nova::DescriptorHeap::Create(context, 1024 * 1024);
     auto cmdPool = nova::CommandPool::Create(context, queue);
+    auto sampler = nova::Sampler::Create(context, nova::Filter::Linear,
+        nova::AddressMode::Repeat, nova::BorderColor::TransparentBlack, 0.f);
     NOVA_CLEANUP(&) {
         fence.Wait();
         cmdPool.Destroy();
+        sampler.Destroy();
         heap.Destroy();
         fence.Destroy();
         context.Destroy();
     };
+
+    heap.WriteSampler(1, sampler);
 
 // -----------------------------------------------------------------------------
     NOVA_TIMEIT("init-vulkan");
     NOVA_LOG("Compiling scene...");
 // -----------------------------------------------------------------------------
 
-    auto renderer = axiom::CreatePathTraceRenderer(context);
-    // auto renderer = axiom::CreateRasterRenderer(context);
+    nova::Ref<axiom::Renderer> renderer;
+    if (type == "--path-trace") {
+        renderer = axiom::CreatePathTraceRenderer(context);
+    } else if (type == "--raster") {
+        renderer = axiom::CreateRasterRenderer(context);
+    }
     renderer->CompileScene(scene, cmdPool, fence);
 
 // -----------------------------------------------------------------------------
@@ -84,6 +112,14 @@ int main(int argc, char* argv[])
         fence.Wait();
         swapchain.Destroy();
     };
+
+    auto imgui = nova::ImGuiLayer({
+        .window = window,
+        .context = context,
+        .heap = heap,
+        .sampler = 1,
+        .fontTextureID = 2,
+    });
 
 // -----------------------------------------------------------------------------
     NOVA_TIMEIT("create-window");
@@ -190,6 +226,23 @@ int main(int argc, char* argv[])
         heap.WriteStorageTexture(0, swapchain.GetCurrent());
 
         renderer->Record(cmd, swapchain.GetCurrent(), 0);
+
+        // UI
+
+        imgui.BeginFrame();
+        {
+            ImGui::Begin("Settings");
+            NOVA_CLEANUP(&) { ImGui::End(); };
+
+            ImGui::Text("Frametime: %s (%.2f fps)", nova::DurationToString(1s / fps).c_str(), fps);
+        }
+
+        cmd.Barrier(
+            nova::PipelineStage::Graphics
+            | nova::PipelineStage::RayTracing
+            | nova::PipelineStage::Compute,
+            nova::PipelineStage::Graphics);
+        imgui.DrawFrame(cmd, swapchain.GetCurrent(), fence);
 
         cmd.Present(swapchain);
         queue.Submit({cmd}, {fence}, {fence});

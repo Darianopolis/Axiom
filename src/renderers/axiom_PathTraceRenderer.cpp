@@ -26,6 +26,7 @@ namespace axiom
         nova::Buffer instanceBuffer;
 
         nova::RayTracingPipeline pipeline;
+        nova::Shader     closestHitShader;
         nova::Shader         rayGenShader;
 
         Vec3 viewPos;
@@ -231,6 +232,25 @@ namespace axiom
             fence.Wait();
         }
 
+        closestHitShader = nova::Shader::Create(context, nova::ShaderStage::ClosestHit, "main",
+            nova::glsl::Compile(nova::ShaderStage::ClosestHit, "", {R"glsl(
+                #version 460
+                #extension GL_EXT_ray_tracing                : require
+                #extension GL_EXT_ray_tracing_position_fetch : require
+
+                struct RayPayload {
+                    vec3 position[3];
+                };
+                layout(location = 0) rayPayloadInEXT RayPayload rayPayload;
+
+                void main()
+                {
+                    rayPayload.position[0] = gl_HitTriangleVertexPositionsEXT[0];
+                    rayPayload.position[1] = gl_HitTriangleVertexPositionsEXT[1];
+                    rayPayload.position[2] = gl_HitTriangleVertexPositionsEXT[2];
+                }
+            )glsl"}));
+
         rayGenShader = nova::Shader::Create(context, nova::ShaderStage::RayGen, "main",
             nova::glsl::Compile(nova::ShaderStage::RayGen, "", {R"glsl(
                 #version 460
@@ -245,7 +265,11 @@ namespace axiom
                 layout(set = 0, binding = 0) uniform image2D RWImage2D[];
                 layout(set = 1, binding = 0) uniform accelerationStructureEXT TLAS;
 
-                layout(location = 0) rayPayloadEXT uint     payload;
+                struct RayPayload {
+                    vec3 position[3];
+                };
+                layout(location = 0) rayPayloadEXT RayPayload rayPayload;
+
                 layout(location = 0) hitObjectAttributeNV vec3 bary;
 
                 layout(push_constant, scalar) uniform pc_ {
@@ -275,14 +299,36 @@ namespace axiom
                     vec3 color = vec3(0.1);
                     if (hitObjectIsHitNV(hit)) {
                         hitObjectGetAttributesNV(hit, 0);
-                        color = vec3(1.0 - bary.x - bary.y, bary.x, bary.y);
+                        hitObjectExecuteShaderNV(hit, 0);
+
+                        vec3 v0 = rayPayload.position[0];
+                        vec3 v1 = rayPayload.position[1];
+                        vec3 v2 = rayPayload.position[2];
+
+                        mat4x3 tform = hitObjectGetObjectToWorldNV(hit);
+
+                        vec3 v0w = tform * vec4(v0, 1);
+                        vec3 v1w = tform * vec4(v1, 1);
+                        vec3 v2w = tform * vec4(v2, 1);
+
+                        vec3 v01 = v1w - v0w;
+                        vec3 v02 = v2w - v0w;
+
+                        vec3 nrm = normalize(cross(v01, v02));
+                        if (hitObjectGetHitKindNV(hit) != gl_HitKindFrontFacingTriangleEXT) {
+                            nrm = -nrm;
+                        }
+
+                        color = (nrm * 0.5 + 0.5) * 0.75;
+
+                        // color = vec3(1.0 - bary.x - bary.y, bary.x, bary.y);
                     }
                     imageStore(RWImage2D[pc.target], ivec2(gl_LaunchIDEXT.xy), vec4(color, 1));
                 }
             )glsl"}));
 
         pipeline = nova::RayTracingPipeline::Create(context);
-        pipeline.Update({ rayGenShader }, {}, {}, {});
+        pipeline.Update({ rayGenShader }, {}, { { closestHitShader } }, {});
     }
 
     void PathTraceRenderer::SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov)
