@@ -235,7 +235,7 @@ namespace axiom
         auto size = target.GetExtent();
 
         cmd.ResetGraphicsState();
-        cmd.SetBlendState({ false, false });
+        cmd.SetBlendState({ true, false });
         cmd.SetViewports({{{0, size.y}, Vec2I(size.x, -i32(size.y))}}, true);
         cmd.SetDepthState(true, true, nova::CompareOp::Greater);
         cmd.SetPolygonState(

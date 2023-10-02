@@ -65,6 +65,7 @@ namespace axiom
         }
         tlas.Destroy();
 
+        closestHitShader.Destroy();
         rayGenShader.Destroy();
         pipeline.Destroy();
     }

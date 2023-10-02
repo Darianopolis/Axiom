@@ -144,8 +144,10 @@ int main(int argc, char* argv[])
         if (dy < 0) moveSpeed /= 1.5f;
     });
 
+    NOVA_CLEANUP(&) { fence.Wait(); };
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
+        imgui.BeginFrame();
 
         fence.Wait();
 
@@ -229,7 +231,6 @@ int main(int argc, char* argv[])
 
         // UI
 
-        imgui.BeginFrame();
         {
             ImGui::Begin("Settings");
             NOVA_CLEANUP(&) { ImGui::End(); };
@@ -237,11 +238,7 @@ int main(int argc, char* argv[])
             ImGui::Text("Frametime: %s (%.2f fps)", nova::DurationToString(1s / fps).c_str(), fps);
         }
 
-        cmd.Barrier(
-            nova::PipelineStage::Graphics
-            | nova::PipelineStage::RayTracing
-            | nova::PipelineStage::Compute,
-            nova::PipelineStage::Graphics);
+        imgui.EndFrame();
         imgui.DrawFrame(cmd, swapchain.GetCurrent(), fence);
 
         cmd.Present(swapchain);
