@@ -59,6 +59,7 @@ int main(int argc, char* argv[])
 // -----------------------------------------------------------------------------
 
     auto renderer = axiom::CreatePathTraceRenderer(context);
+    // auto renderer = axiom::CreateRasterRenderer(context);
     renderer->CompileScene(scene, cmdPool, fence);
 
 // -----------------------------------------------------------------------------

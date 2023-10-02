@@ -4,22 +4,6 @@
 
 namespace axiom
 {
-    static Mat4 ProjInfReversedZRH(f32 fovY, f32 aspectWbyH, f32 zNear)
-    {
-        // https://nlguillemot.wordpress.com/2016/12/07/reversed-z-in-opengl/
-
-        f32 f = 1.f / glm::tan(fovY / 2.f);
-        Mat4 proj{};
-        proj[0][0] = f / aspectWbyH;
-        proj[1][1] = f;
-        proj[3][2] = zNear; // Right, middle-bottom
-        proj[2][3] = -1.f;  // Bottom, middle-right
-
-        return proj;
-    }
-
-// -----------------------------------------------------------------------------
-
     struct CompiledMesh
     {
         i32 vertexOffset;
@@ -35,8 +19,8 @@ namespace axiom
 
         nova::AccelerationStructure tlas;
 
-        nova::Buffer vertexBuffer;
-        nova::Buffer  indexBuffer;
+        nova::Buffer            shadingAttribBuffer;
+        nova::Buffer                    indexBuffer;
         nova::HashMap<void*, CompiledMesh> meshData;
 
         nova::Buffer instanceBuffer;
@@ -71,7 +55,7 @@ namespace axiom
 
     PathTraceRenderer::~PathTraceRenderer()
     {
-        vertexBuffer.Destroy();
+        shadingAttribBuffer.Destroy();
         indexBuffer.Destroy();
         instanceBuffer.Destroy();
 
@@ -86,15 +70,14 @@ namespace axiom
 
     void PathTraceRenderer::CompileScene(Scene& _scene, nova::CommandPool cmdPool, nova::Fence fence)
     {
-        (void)cmdPool;
-        (void)fence;
-
         scene = &_scene;
 
         u64 vertexCount = 0;
+        u64 maxPerBlasVertexCount = 0;
         u64 indexCount = 0;
         for (auto& mesh : scene->meshes) {
-            vertexCount += mesh->vertices.size();
+            maxPerBlasVertexCount = std::max(maxPerBlasVertexCount, mesh->positionAttribs.size());
+            vertexCount += mesh->positionAttribs.size();
             indexCount += mesh->indices.size();
         }
 
@@ -102,8 +85,8 @@ namespace axiom
         NOVA_LOG("Compiling, unique vertices = {}, unique indices = {}", vertexCount, indexCount);
 #endif // ----------------------------------------------------------------------
 
-        vertexBuffer = nova::Buffer::Create(context,
-            vertexCount * sizeof(Vertex),
+        shadingAttribBuffer = nova::Buffer::Create(context,
+            vertexCount * sizeof(ShadingAttrib),
             nova::BufferUsage::Storage | nova::BufferUsage::AccelBuild,
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
@@ -118,8 +101,8 @@ namespace axiom
         for (auto& mesh : scene->meshes) {
             meshData[mesh.Raw()] = CompiledMesh{ i32(vertexOffset), u32(indexOffset) };
 
-            vertexBuffer.Set<Vertex>(mesh->vertices, vertexOffset);
-            vertexOffset += mesh->vertices.size();
+            shadingAttribBuffer.Set<ShadingAttrib>(mesh->shadingAttribs, vertexOffset);
+            vertexOffset += mesh->positionAttribs.size();
 
             indexBuffer.Set<u32>(mesh->indices, indexOffset);
             indexOffset += mesh->indices.size();
@@ -132,27 +115,72 @@ namespace axiom
             scratch.Destroy();
         };
 
-        for (u32 i = 0; i < scene->meshes.size(); ++i) {
-            auto& mesh = scene->meshes[i];
-            auto& data = meshData.at(mesh.Raw());
+        {
+            // Create temporary buffer to hold vertex positions
 
-            builder.SetTriangles(0,
-                vertexBuffer.GetAddress() + data.vertexOffset * sizeof(Vertex), nova::Format::RGB32_SFloat, u32(sizeof(Vertex)), u32(mesh->vertices.size()),
-                indexBuffer.GetAddress() + data.firstIndex * sizeof(u32), nova::IndexType::U32, u32(mesh->indices.size()) / 3);
+            constexpr usz MinAccelInputBufferSize = 64ull * 1024 * 1024;
+            auto posAttribBuffer = nova::Buffer::Create(context,
+                std::max(MinAccelInputBufferSize, maxPerBlasVertexCount * sizeof(Vec3)),
+                nova::BufferUsage::Storage | nova::BufferUsage::AccelBuild,
+                nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
+            NOVA_CLEANUP(&) { posAttribBuffer.Destroy(); };
 
             builder.Prepare(
                 nova::AccelerationStructureType::BottomLevel,
                 nova::AccelerationStructureFlags::AllowDataAccess
+                | nova::AccelerationStructureFlags::AllowCompaction
                 | nova::AccelerationStructureFlags::PreferFastTrace, 1);
 
-            scratch.Resize(builder.GetBuildScratchSize());
+            // Find maximal scratch and build BLAS sizes for all meshes
 
-            auto cmd = cmdPool.Begin();
-            data.blas = nova::AccelerationStructure::Create(context, builder.GetBuildSize(),
+            u64 scratchSize = 0;
+            u64 buildBlasSize = 0;
+            for (u32 i = 0; i < scene->meshes.size(); ++i) {
+                auto& mesh = scene->meshes[i];
+                auto& data = meshData.at(mesh.Raw());
+
+                builder.SetTriangles(0,
+                    posAttribBuffer.GetAddress(), nova::Format::RGB32_SFloat, u32(sizeof(Vec3)), u32(mesh->positionAttribs.size()),
+                    indexBuffer.GetAddress() + data.firstIndex * sizeof(u32), nova::IndexType::U32, u32(mesh->indices.size()) / 3);
+
+                scratchSize = std::max(scratchSize, builder.GetBuildScratchSize());
+                buildBlasSize = std::max(buildBlasSize, builder.GetBuildSize());
+            }
+
+            // Create temporary scratch and build BLAS
+
+            scratch.Resize(scratchSize);
+            auto buildBlas = nova::AccelerationStructure::Create(context, buildBlasSize,
                 nova::AccelerationStructureType::BottomLevel);
-            cmd.BuildAccelerationStructure(builder, data.blas, scratch);
-            context.GetQueue(nova::QueueFlags::Graphics, 0).Submit({cmd}, {}, {fence});
-            fence.Wait();
+            NOVA_CLEANUP(&) { buildBlas.Destroy(); };
+
+            for (u32 i = 0; i < scene->meshes.size(); ++i) {
+                auto& mesh = scene->meshes[i];
+                auto& data = meshData.at(mesh.Raw());
+
+                // Load position data
+
+                posAttribBuffer.Set<Vec3>(mesh->positionAttribs);
+                builder.SetTriangles(0,
+                    posAttribBuffer.GetAddress(), nova::Format::RGB32_SFloat, u32(sizeof(Vec3)), u32(mesh->positionAttribs.size()),
+                    indexBuffer.GetAddress() + data.firstIndex * sizeof(u32), nova::IndexType::U32, u32(mesh->indices.size()) / 3);
+
+                // Build
+
+                auto cmd = cmdPool.Begin();
+                cmd.BuildAccelerationStructure(builder, buildBlas, scratch);
+                context.GetQueue(nova::QueueFlags::Graphics, 0).Submit({cmd}, {}, {fence});
+                fence.Wait();
+
+                // Create final BLAS and compact
+
+                data.blas = nova::AccelerationStructure::Create(context, builder.GetCompactSize(),
+                    nova::AccelerationStructureType::BottomLevel);
+                cmd = cmdPool.Begin();
+                cmd.CompactAccelerationStructure(data.blas, buildBlas);
+                context.GetQueue(nova::QueueFlags::Graphics, 0).Submit({cmd}, {}, {fence});
+                fence.Wait();
+            }
         }
 
         instanceBuffer = nova::Buffer::Create(context,
@@ -177,7 +205,7 @@ namespace axiom
             selectedInstanceCount++;
 
 #ifdef AXIOM_TRACE_COMPILE // --------------------------------------------------
-            instancedVertexCount += instance->mesh->vertices.size();
+            instancedVertexCount += instance->mesh->positionAttribs.size();
             instancedIndexCount += instance->mesh->indices.size();
 #endif // ----------------------------------------------------------------------
         }

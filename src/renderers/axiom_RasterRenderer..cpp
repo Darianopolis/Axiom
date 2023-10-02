@@ -26,8 +26,9 @@ namespace axiom
 
         nova::Context context;
 
-        nova::Buffer vertexBuffer;
-        nova::Buffer  indexBuffer;
+        nova::Buffer     posAttribBuffer;
+        nova::Buffer shadingAttribBuffer;
+        nova::Buffer         indexBuffer;
         nova::HashMap<void*, std::pair<i32, u32>> meshOffsets;
 
         nova::Buffer transformBuffer;
@@ -65,7 +66,8 @@ namespace axiom
 
     RasterRenderer::~RasterRenderer()
     {
-        vertexBuffer.Destroy();
+        posAttribBuffer.Destroy();
+        shadingAttribBuffer.Destroy();
         indexBuffer.Destroy();
         transformBuffer.Destroy();
         indirectBuffer.Destroy();
@@ -86,7 +88,7 @@ namespace axiom
         u64 vertexCount = 0;
         u64 indexCount = 0;
         for (auto& mesh : scene->meshes) {
-            vertexCount += mesh->vertices.size();
+            vertexCount += mesh->positionAttribs.size();
             indexCount += mesh->indices.size();
         }
 
@@ -94,8 +96,13 @@ namespace axiom
         NOVA_LOG("Compiling, unique vertices = {}, unique indices = {}", vertexCount, indexCount);
 #endif // ----------------------------------------------------------------------
 
-        vertexBuffer = nova::Buffer::Create(context,
-            vertexCount * sizeof(Vertex),
+        posAttribBuffer = nova::Buffer::Create(context,
+            vertexCount * sizeof(Vec3),
+            nova::BufferUsage::Storage,
+            nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
+
+        shadingAttribBuffer = nova::Buffer::Create(context,
+            vertexCount * sizeof(ShadingAttrib),
             nova::BufferUsage::Storage,
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
@@ -109,8 +116,9 @@ namespace axiom
         for (auto& mesh : scene->meshes) {
             meshOffsets[mesh.Raw()] = { i32(vertexOffset), u32(indexOffset) };
 
-            vertexBuffer.Set<Vertex>(mesh->vertices, vertexOffset);
-            vertexOffset += mesh->vertices.size();
+            posAttribBuffer.Set<Vec3>(mesh->positionAttribs, vertexOffset);
+            shadingAttribBuffer.Set<ShadingAttrib>(mesh->shadingAttribs, vertexOffset);
+            vertexOffset += mesh->positionAttribs.size();
 
             indexBuffer.Set<u32>(mesh->indices, indexOffset);
             indexOffset += mesh->indices.size();
@@ -148,11 +156,13 @@ namespace axiom
                 #extension GL_EXT_buffer_reference2    : require
                 #extension GL_EXT_nonuniform_qualifier : require
 
-                layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer Vertex {
+                layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer PosAttrib {
                     vec3 position;
-                    vec3 normal;
-                    vec4 tangent;
-                    vec2 uv;
+                };
+
+                layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer ShadingAttrib {
+                    uint tangentSpace_matIndex;
+                    uint texCoord;
                 };
 
                 layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer Instance {
@@ -160,19 +170,20 @@ namespace axiom
                 };
 
                 layout(push_constant, scalar) readonly uniform pc_ {
-                    Vertex    vertices;
-                    Instance instances;
-                    mat4      viewProj;
+                    PosAttrib         posAttribs;
+                    ShadingAttrib shadingAttribs;
+                    Instance           instances;
+                    mat4                viewProj;
                 } pc;
 
                 layout(location = 0) out vec3 outPosition;
 
                 void main()
                 {
-                    Vertex v = pc.vertices[gl_VertexIndex];
+                    PosAttrib p = pc.posAttribs[gl_VertexIndex];
                     Instance instance = pc.instances[gl_InstanceIndex];
 
-                    vec4 worldPos = instance.transform * vec4(v.position, 1);
+                    vec4 worldPos = instance.transform * vec4(p.position, 1);
                     outPosition = vec3(worldPos);
                     gl_Position = pc.viewProj * worldPos;
                 }
@@ -237,9 +248,10 @@ namespace axiom
 
         struct PushConstants
         {
-            u64  vertices;
-            u64 instances;
-            Mat4 viewProj;
+            u64     posAttribs;
+            u64 shadingAttribs;
+            u64      instances;
+            Mat4      viewProj;
         };
 
         cmd.BeginRendering({{}, size}, {target}, depthImage);
@@ -247,7 +259,8 @@ namespace axiom
         cmd.ClearDepth(0.f, Vec2(size));
         cmd.BindIndexBuffer(indexBuffer, nova::IndexType::U32);
         cmd.PushConstants(PushConstants {
-            .vertices = vertexBuffer.GetAddress(),
+            .posAttribs = posAttribBuffer.GetAddress(),
+            .shadingAttribs = shadingAttribBuffer.GetAddress(),
             .instances = transformBuffer.GetAddress(),
             .viewProj = viewProj,
         });

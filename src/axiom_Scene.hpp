@@ -4,19 +4,19 @@
 
 namespace axiom
 {
-    struct Vertex
+    struct ShadingAttrib
     {
-        Vec3 position;
-        Vec3   normal;
-        Vec4  tangent;
-        Vec2 texCoord;
-        i32  matIndex;
+        u32    normal : 16; // unorm8x2
+        u32   tangent :  8; // snorm8
+        u32  matIndex :  8; // uint8
+        u32  texCoord;      // float16x2
     };
 
     struct TriMesh : nova::RefCounted
     {
-        std::vector<Vertex> vertices;
-        std::vector<u32>     indices;
+        std::vector<Vec3>         positionAttribs;
+        std::vector<ShadingAttrib> shadingAttribs;
+        std::vector<u32>                  indices;
     };
 
     enum class TextureFormat
@@ -38,6 +38,8 @@ namespace axiom
     {
         nova::Ref<TextureMap>   map;
         std::array<i32, 4> channels{ -1, -1, -1, -1 };
+
+		TextureChannel() = default;
 
         TextureChannel(nova::Ref<TextureMap> _map, Span<i32> _channels)
             : map(std::move(_map))

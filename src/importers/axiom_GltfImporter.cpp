@@ -57,7 +57,7 @@ namespace axiom
 
     void GltfImporter::Import(std::filesystem::path gltf, std::optional<std::string_view> sceneName)
     {
-        fastgltf::Parser parser{
+        fastgltf::Parser parser {
               fastgltf::Extensions::KHR_texture_transform
             | fastgltf::Extensions::KHR_texture_basisu
             | fastgltf::Extensions::MSFT_texture_dds
@@ -167,7 +167,8 @@ namespace axiom
         auto outMesh = nova::Ref<TriMesh>::Create();
         importer.scene->meshes.emplace_back(outMesh);
         meshes.emplace_back(outMesh);
-        outMesh->vertices.resize(vertexCount);
+        outMesh->positionAttribs.resize(vertexCount);
+        outMesh->shadingAttribs.resize(vertexCount);
         outMesh->indices.resize(indexCount);
 
         for (auto& prim : primitives) {
@@ -176,24 +177,23 @@ namespace axiom
             // Indices
             auto& indices = asset->accessors[prim->indicesAccessor.value()];
             fastgltf::iterateAccessorWithIndex<u32>(*asset,
-                indices,
-                [&](u32 vIndex, usz iIndex) {
+                indices, [&](u32 vIndex, usz iIndex) {
                     outMesh->indices[indexOffset + iIndex] = u32(vertexOffset + vIndex);
                 });
 
             // Positions
             auto& positions = asset->accessors[prim->findAttribute("POSITION")->second];
             fastgltf::iterateAccessorWithIndex<Vec3>(*asset,
-                positions,
-                [&](Vec3 pos, usz index) {
-                    outMesh->vertices[vertexOffset + index].position = pos;
+                positions, [&](Vec3 pos, usz index) {
+                    outMesh->positionAttribs[vertexOffset + index] = pos;
                 });
 
             // Normals
             if (auto normals = prim->findAttribute("NORMAL"); normals != prim->attributes.end()) {
                 fastgltf::iterateAccessorWithIndex<Vec3>(*asset,
                     asset->accessors[normals->second], [&](Vec3 normal, usz index) {
-                        outMesh->vertices[vertexOffset + index].normal = normal;
+                        (void)normal; (void)index;
+                        // outMesh->vertices[vertexOffset + index].normal = normal;
                     });
             }
 
@@ -201,7 +201,8 @@ namespace axiom
             if (auto tangents = prim->findAttribute("TANGENT"); tangents != prim->attributes.end()) {
                 fastgltf::iterateAccessorWithIndex<Vec4>(*asset,
                     asset->accessors[tangents->second], [&](Vec4 tangent, usz index) {
-                        outMesh->vertices[vertexOffset + index].tangent = tangent;
+                        (void)tangent; (void)index;
+                        // outMesh->vertices[vertexOffset + index].tangent = tangent;
                     });
             }
 
@@ -209,7 +210,8 @@ namespace axiom
             if (auto texCoords = prim->findAttribute("TEXCOORD_0"); texCoords != prim->attributes.end()) {
                 fastgltf::iterateAccessorWithIndex<Vec2>(*asset,
                     asset->accessors[texCoords->second], [&](Vec2 texCoord, usz index) {
-                        outMesh->vertices[vertexOffset + index].texCoord = texCoord;
+                        (void)texCoord; (void)index;
+                        // outMesh->vertices[vertexOffset + index].texCoord = texCoord;
                     });
             }
 
@@ -217,7 +219,7 @@ namespace axiom
             {
                 i32 matIndex = i32(prim->materialIndex.value_or(-1));
                 for (u32 i = 0; i < positions.count; ++i) {
-                    outMesh->vertices[vertexOffset + i].matIndex = matIndex;
+                    outMesh->shadingAttribs[vertexOffset + i].matIndex = matIndex;
                 }
             }
 
@@ -375,6 +377,9 @@ namespace axiom
             image->size = Vec2(1);
             image->data = { b8(data[0]), b8(data[1]), b8(data[2]), b8(data[3]) };
 
+            textures.push_back(image);
+            singlePixelTextures.insert({ encoded, u32(textures.size() - 1) });
+
             return image;
         };
 
@@ -386,7 +391,6 @@ namespace axiom
         auto metalnessRoughness = getImage(pbr.metallicRoughnessTexture, { pbr.metallicFactor, pbr.roughnessFactor });
         outMaterial->metalness = { metalnessRoughness, { 0 } };
         outMaterial->roughness = { metalnessRoughness, { 1 } };
-
 
         outMaterial->normals = { getImage(material.normalTexture, { 0.5f, 0.5f, 1.f }), { 0, 1, 2 } };
         outMaterial->emissivity = { getImage(material.emissiveTexture, material.emissiveFactor), { 0, 1, 2 } };
@@ -425,7 +429,6 @@ namespace axiom
 
     void GltfImporterImpl::ProcessNode(const fastgltf::Node& node, Mat4 parentTransform)
     {
-
         Mat4 transform = Mat4(1.f);
         if (auto trs = std::get_if<fastgltf::Node::TRS>(&node.transform)) {
             auto translation = std::bit_cast<Vec3>(trs->translation);
