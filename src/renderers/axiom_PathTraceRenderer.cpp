@@ -2,6 +2,8 @@
 
 #include <nova/rhi/vulkan/glsl/nova_VulkanGlsl.hpp>
 
+#include <nova/rhi/vulkan/nova_VulkanRHI.hpp>
+
 namespace axiom
 {
     struct CompiledMesh
@@ -33,6 +35,7 @@ namespace axiom
         nova::Buffer tlasInstanceBuffer;
 
         nova::RayTracingPipeline pipeline;
+        nova::Buffer            hitGroups;
         nova::Shader     closestHitShader;
         nova::Shader         rayGenShader;
 
@@ -67,6 +70,7 @@ namespace axiom
         indexBuffer.Destroy();
         tlasInstanceBuffer.Destroy();
         meshInstanceBuffer.Destroy();
+        hitGroups.Destroy();
 
         for (auto&[p, data] : meshData) {
             data.blas.Destroy();
@@ -502,8 +506,8 @@ namespace axiom
 
 // -----------------------------------------------------------------------------
 // #define DEBUG_UV
-// #define DEBUG_FLAT_NRM
-#define DEBUG_NRM
+#define DEBUG_FLAT_NRM
+// #define DEBUG_NRM
 // #define DEBUG_TGT
 // #define DEBUG_BARY
 // -----------------------------------------------------------------------------
@@ -521,10 +525,6 @@ namespace axiom
 #else
                         color = vec3(1, 0, 0);
 #endif
-
-
-
-
                     }
                     imageStore(RWImage2D[pc.target], ivec2(gl_LaunchIDEXT.xy), vec4(color, 1));
                 }
@@ -532,6 +532,13 @@ namespace axiom
 
         pipeline = nova::RayTracingPipeline::Create(context);
         pipeline.Update({ rayGenShader }, {}, { { closestHitShader } }, {});
+
+        hitGroups = nova::Buffer::Create(context,
+            pipeline.GetShaderBindingTableSize(1),
+            nova::BufferUsage::ShaderBindingTable,
+            nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
+
+        pipeline.WriteHandle(hitGroups.GetMapped(), 0, 0);
     }
 
     void PathTraceRenderer::SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov)
@@ -568,6 +575,6 @@ namespace axiom
             .camZOffset = 1.f / glm::tan(0.5f * viewFov),
         });
 
-        cmd.TraceRays(pipeline, target.GetExtent(), 0);
+        cmd.TraceRays(pipeline, target.GetExtent(), 0, hitGroups.GetAddress(), 1);
     }
 }
