@@ -192,22 +192,23 @@ int main(int argc, char* argv[])
                 LONG dy = p.y - savedPos.y;
                 if (lastMouseDrag) {
                     delta = { f32(dx), f32(dy) };
-                }
-                else {
+                } else {
                     GetCursorPos(&savedPos);
                     ShowCursor(false);
                     lastMouseDrag = true;
                 }
                 SetCursorPos(savedPos.x, savedPos.y);
-            }
-            else if (lastMouseDrag) {
+            } else if (lastMouseDrag) {
                 ShowCursor(true);
                 lastMouseDrag = false;
             }
 
             if ((delta.x || delta.y) && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_2)) {
                 rotation = glm::angleAxis(delta.x * mouseSpeed, Vec3(0.f, -1.f, 0.f)) * rotation;
-                rotation = rotation * glm::angleAxis(delta.y * mouseSpeed, Vec3(-1.f, 0.f, 0.f));
+                auto pitchedRot = rotation * glm::angleAxis(delta.y * mouseSpeed, Vec3(-1.f, 0.f, 0.f));
+                if (glm::dot(pitchedRot * Vec3(0.f, 1.f,  0.f), Vec3(0.f, 1.f, 0.f)) >= 0.f) {
+                    rotation = pitchedRot;
+                }
                 rotation = glm::normalize(rotation);
             }
         }

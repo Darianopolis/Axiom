@@ -11,6 +11,12 @@ namespace axiom
         nova::AccelerationStructure blas;
     };
 
+    struct GPU_MeshInstance
+    {
+        u64 shadingAttribs;
+        u64        indices;
+    };
+
     struct PathTraceRenderer : Renderer
     {
         Scene* scene = nullptr;
@@ -21,9 +27,10 @@ namespace axiom
 
         nova::Buffer            shadingAttribBuffer;
         nova::Buffer                    indexBuffer;
+        nova::Buffer             meshInstanceBuffer;
         nova::HashMap<void*, CompiledMesh> meshData;
 
-        nova::Buffer instanceBuffer;
+        nova::Buffer tlasInstanceBuffer;
 
         nova::RayTracingPipeline pipeline;
         nova::Shader     closestHitShader;
@@ -58,7 +65,8 @@ namespace axiom
     {
         shadingAttribBuffer.Destroy();
         indexBuffer.Destroy();
-        instanceBuffer.Destroy();
+        tlasInstanceBuffer.Destroy();
+        meshInstanceBuffer.Destroy();
 
         for (auto&[p, data] : meshData) {
             data.blas.Destroy();
@@ -185,7 +193,12 @@ namespace axiom
             }
         }
 
-        instanceBuffer = nova::Buffer::Create(context,
+        meshInstanceBuffer = nova::Buffer::Create(context,
+            scene->instances.size() * sizeof(GPU_MeshInstance),
+            nova::BufferUsage::Storage,
+            nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
+
+        tlasInstanceBuffer = nova::Buffer::Create(context,
             scene->instances.size() * sizeof(VkAccelerationStructureInstanceKHR),
             nova::BufferUsage::AccelBuild,
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
@@ -202,7 +215,14 @@ namespace axiom
             if (!data.blas)
                 continue;
 
-            builder.WriteInstance(instanceBuffer.GetMapped(), selectedInstanceCount,
+            meshInstanceBuffer.Set<GPU_MeshInstance>({{
+                .shadingAttribs = shadingAttribBuffer.GetAddress()
+                    + data.vertexOffset * sizeof(ShadingAttrib),
+                .indices = indexBuffer.GetAddress()
+                    + data.firstIndex * sizeof(u32),
+            }}, i);
+
+            builder.WriteInstance(tlasInstanceBuffer.GetMapped(), selectedInstanceCount,
                 data.blas, instance->transform, selectedInstanceCount, 0xFF, 0, {});
             selectedInstanceCount++;
 
@@ -217,7 +237,7 @@ namespace axiom
 #endif // ----------------------------------------------------------------------
 
         {
-            builder.SetInstances(0, instanceBuffer.GetAddress(), selectedInstanceCount);
+            builder.SetInstances(0, tlasInstanceBuffer.GetAddress(), selectedInstanceCount);
             builder.Prepare(
                 nova::AccelerationStructureType::TopLevel,
                 nova::AccelerationStructureFlags::AllowDataAccess
@@ -255,16 +275,16 @@ namespace axiom
         rayGenShader = nova::Shader::Create(context, nova::ShaderStage::RayGen, "main",
             nova::glsl::Compile(nova::ShaderStage::RayGen, "", {R"glsl(
                 #version 460
-                #extension GL_EXT_scalar_block_layout         : require
-                #extension GL_EXT_buffer_reference2           : require
-                #extension GL_EXT_nonuniform_qualifier        : require
-                #extension GL_EXT_ray_tracing                 : require
-                #extension GL_EXT_ray_tracing_position_fetch  : require
-                #extension GL_NV_shader_invocation_reorder    : require
-                #extension GL_EXT_shader_image_load_formatted : require
+                #extension GL_EXT_scalar_block_layout                    : require
+                #extension GL_EXT_buffer_reference2                      : require
+                #extension GL_EXT_nonuniform_qualifier                   : require
+                #extension GL_EXT_ray_tracing                            : require
+                #extension GL_EXT_ray_tracing_position_fetch             : require
+                #extension GL_NV_shader_invocation_reorder               : require
+                #extension GL_EXT_shader_image_load_formatted            : require
+                #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 
                 layout(set = 0, binding = 0) uniform image2D RWImage2D[];
-                layout(set = 1, binding = 0) uniform accelerationStructureEXT TLAS;
 
                 struct RayPayload {
                     vec3 position[3];
@@ -273,13 +293,91 @@ namespace axiom
 
                 layout(location = 0) hitObjectAttributeNV vec3 bary;
 
+                layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer ShadingAttrib {
+                    uint  tgtSpace;
+                    uint texCoords;
+                };
+
+                layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer Index {
+                    uint value;
+                };
+
+                layout(buffer_reference, scalar, buffer_reference_align = 8) readonly buffer MeshInstance {
+                    ShadingAttrib shadingAttribs;
+                    Index                indices;
+                };
+
                 layout(push_constant, scalar) uniform pc_ {
-                    uint      target;
-                    vec3         pos;
-                    vec3        camX;
-                    vec3        camY;
-                    float camZOffset;
+                    uint64_t          tlas;
+                    MeshInstance instances;
+                    uint            target;
+                    vec3               pos;
+                    vec3              camX;
+                    vec3              camY;
+                    float       camZOffset;
                 } pc;
+
+                float PI = 3.14159265358979323846264338327950288419716939937510;
+
+                vec3 SignedOctDecode_(vec3 n)
+                {
+                    vec3 OutN;
+
+                    OutN.x = (n.x - n.y);
+                    OutN.y = (n.x + n.y) - 1.0;
+                    OutN.z = n.z * 2.0 - 1.0;
+                    OutN.z = OutN.z * (1.0 - abs(OutN.x) - abs(OutN.y));
+
+                    OutN = normalize(OutN);
+                    return OutN;
+                }
+
+                vec3 SignedOctDecode(uint tgtSpace)
+                {
+                    float x = float(bitfieldExtract(tgtSpace, 0, 10)) / 1023.0;
+                    float y = float(bitfieldExtract(tgtSpace, 10, 10)) / 1023.0;
+                    float s = float(bitfieldExtract(tgtSpace, 20, 1));
+
+                    return SignedOctDecode_(vec3(x, y, s));
+                }
+
+                vec2 DecodeDiamond(float p)
+                {
+                    vec2 v;
+
+                    // Remap p to the appropriate segment on the diamond
+                    float p_sign = sign(p - 0.5);
+                    v.x = -p_sign * 4.0 * p + 1.0 + p_sign * 2.0;
+                    v.y = p_sign * (1.0 - abs(v.x));
+
+                    // Normalization extends the point on the diamond back to the unit circle
+                    return normalize(v);
+                }
+
+                vec3 DecodeTangent_(vec3 normal, float diamondTangent)
+                {
+                    // As in the encode step, find our canonical tangent basis span(t1, t2)
+                    vec3 t1;
+                    if (abs(normal.y) > abs(normal.z)) {
+                        t1 = vec3(normal.y, -normal.x, 0.f);
+                    } else {
+                        t1 = vec3(normal.z, 0.f, -normal.x);
+                    }
+                    t1 = normalize(t1);
+
+                    vec3 t2 = cross(t1, normal);
+
+                    // Recover the coordinates used with t1 and t2
+                    vec2 packedTangent = DecodeDiamond(diamondTangent);
+
+                    return packedTangent.x * t1 + packedTangent.y * t2;
+                }
+
+                vec3 DecodeTangent(vec3 normal, uint tgtSpace)
+                {
+                    float tgtAngle = float(bitfieldExtract(tgtSpace, 21, 10)) / 1023.0;
+                    return DecodeTangent_(normal, tgtAngle);
+                }
 
                 void main()
                 {
@@ -294,35 +392,139 @@ namespace axiom
                     d.y *= -1.0;
                     vec3 dir = normalize((pc.camY * d.y) + (pc.camX * d.x) - focalPoint);
 
+                    // // Equirectangular
+                    // vec2 uv = d;
+                    // float yaw = uv.x * PI;
+                    // float pitch = uv.y * PI * 0.5f;
+                    // float x = sin(yaw) * cos(pitch);
+                    // float y = -sin(pitch);
+                    // float z = -cos(yaw) * cos(pitch);
+                    // mat3 tbn = mat3(pc.camX, pc.camY, focalPoint);
+                    // vec3 dir = tbn * vec3(x, y, z);
+
+                    // // Fisheye
+                    // float fov = radians(180);
+                    // float aspect = float(gl_LaunchSizeEXT.x) / float(gl_LaunchSizeEXT.y);
+                    // vec2 uv = d;
+                    // vec2 xy = uv * vec2(1, -aspect);
+                    // float r = sqrt(dot(xy, xy));
+                    // vec2 cs = vec2 (cos(r * fov), sin(r * fov));
+                    // mat3 tbn = mat3(pc.camX, pc.camY, -focalPoint);
+                    // vec3 dir = tbn * vec3 (cs.y * xy / r, cs.x);
+
                     hitObjectNV hit;
-                    hitObjectTraceRayNV(hit, TLAS, 0, 0xFF, 0, 0, 0, pc.pos, 0, dir, 8000000, 0);
+                    hitObjectTraceRayNV(hit,
+                        accelerationStructureEXT(pc.tlas),
+                        0,       // Flags
+                        0xFF,    // Hit Mask
+                        0,       // sbtOffset
+                        0,       // sbtStride
+                        0,       // missOffset
+                        pc.pos,  // rayOrigin
+                        0.0,     // tMin
+                        dir,     // rayDir
+                        8000000, // tMax
+                        0);      // payload
+
+                    // TODO: Only reorder on bounces
+                    reorderThreadNV(0, 0);
 
                     vec3 color = vec3(0.1);
                     if (hitObjectIsHitNV(hit)) {
+                        int instanceID = hitObjectGetInstanceCustomIndexNV(hit);
+                        int primitiveID = hitObjectGetInstanceCustomIndexNV(hit);
+                        int geometryIndex = hitObjectGetGeometryIndexNV(hit);
+                        uint hitKind = hitObjectGetHitKindNV(hit);
+
+                        mat4x3 objToWorld = hitObjectGetObjectToWorldNV(hit);
+                        mat3x3 tgtSpaceToWorld = transpose(inverse(mat3(objToWorld)));
+
                         hitObjectGetAttributesNV(hit, 0);
                         hitObjectExecuteShaderNV(hit, 0);
 
+                        // Barycentric weights
+                        vec3 w = vec3(1.0 - bary.x - bary.y, bary.x, bary.y);
+
+                        // Instance
+                        MeshInstance instance = pc.instances[instanceID];
+
+                        // Indices
+                        uint primID = hitObjectGetPrimitiveIndexNV(hit);
+                        uint i0 = instance.indices[primID * 3 + 0].value;
+                        uint i1 = instance.indices[primID * 3 + 1].value;
+                        uint i2 = instance.indices[primID * 3 + 2].value;
+
+                        // Shading attributes
+                        ShadingAttrib sa0 = instance.shadingAttribs[i0];
+                        ShadingAttrib sa1 = instance.shadingAttribs[i1];
+                        ShadingAttrib sa2 = instance.shadingAttribs[i2];
+
+                        // Normals
+                        vec3 nrm0 = SignedOctDecode(sa0.tgtSpace);
+                        vec3 nrm1 = SignedOctDecode(sa1.tgtSpace);
+                        vec3 nrm2 = SignedOctDecode(sa2.tgtSpace);
+                        vec3 nrm = nrm0 * w.x + nrm1 * w.y + nrm2 * w.z;
+                        nrm = normalize(tgtSpaceToWorld * nrm);
+
+                        // Tangents
+                        vec3 tgt0 = DecodeTangent(nrm0, sa0.tgtSpace);
+                        vec3 tgt1 = DecodeTangent(nrm1, sa1.tgtSpace);
+                        vec3 tgt2 = DecodeTangent(nrm2, sa2.tgtSpace);
+                        vec3 tgt = tgt0 * w.x + tgt1 * w.y + tgt2 * w.z;
+                        tgt = normalize(tgtSpaceToWorld * tgt);
+
+                        // Tex Coords
+                        vec2 uv0 = unpackHalf2x16(sa0.texCoords);
+                        vec2 uv1 = unpackHalf2x16(sa1.texCoords);
+                        vec2 uv2 = unpackHalf2x16(sa2.texCoords);
+                        vec2 uv = uv0 * w.x + uv1 * w.y + uv2 * w.z;
+
+                        // Positions (local)
                         vec3 v0 = rayPayload.position[0];
                         vec3 v1 = rayPayload.position[1];
                         vec3 v2 = rayPayload.position[2];
 
-                        mat4x3 tform = hitObjectGetObjectToWorldNV(hit);
+                        // Positions (transformed)
+                        vec3 v0w = objToWorld * vec4(v0, 1);
+                        vec3 v1w = objToWorld * vec4(v1, 1);
+                        vec3 v2w = objToWorld * vec4(v2, 1);
 
-                        vec3 v0w = tform * vec4(v0, 1);
-                        vec3 v1w = tform * vec4(v1, 1);
-                        vec3 v2w = tform * vec4(v2, 1);
-
+                        // Flat normal
                         vec3 v01 = v1w - v0w;
                         vec3 v02 = v2w - v0w;
+                        vec3 flatNrm = normalize(cross(v01, v02));
 
-                        vec3 nrm = normalize(cross(v01, v02));
-                        if (hitObjectGetHitKindNV(hit) != gl_HitKindFrontFacingTriangleEXT) {
+                        // Side corrected normals
+                        if (hitKind != gl_HitKindFrontFacingTriangleEXT) {
                             nrm = -nrm;
+                            flatNrm = -flatNrm;
                         }
 
-                        color = (nrm * 0.5 + 0.5) * 0.75;
+// -----------------------------------------------------------------------------
+// #define DEBUG_UV
+// #define DEBUG_FLAT_NRM
+#define DEBUG_NRM
+// #define DEBUG_TGT
+// #define DEBUG_BARY
+// -----------------------------------------------------------------------------
 
-                        // color = vec3(1.0 - bary.x - bary.y, bary.x, bary.y);
+#if   defined(DEBUG_UV)
+                        color = vec3(uv, 0);
+#elif defined(DEBUG_FLAT_NRM)
+                        color = (flatNrm * 0.5 + 0.5) * 0.75;
+#elif defined(DEBUG_NRM)
+                        color = (nrm * 0.5 + 0.5) * 0.75;
+#elif defined(DEBUG_TGT)
+                        color = (tgt * 0.5 + 0.5) * 0.75;
+#elif defined(DEBUG_BARY)
+                        color = vec3(1.0 - bary.x - bary.y, bary.x, bary.y);
+#else
+                        color = vec3(1, 0, 0);
+#endif
+
+
+
+
                     }
                     imageStore(RWImage2D[pc.target], ivec2(gl_LaunchIDEXT.xy), vec4(color, 1));
                 }
@@ -347,6 +549,8 @@ namespace axiom
 
         struct PushConstants
         {
+            u64       tlas;
+            u64  instances;
             u32     target;
             Vec3       pos;
             Vec3      camX;
@@ -354,9 +558,9 @@ namespace axiom
             f32 camZOffset;
         };
 
-        cmd.BindAccelerationStructure(nova::BindPoint::RayTracing, tlas);
-
         cmd.PushConstants(PushConstants {
+            .tlas = tlas.GetAddress(),
+            .instances = meshInstanceBuffer.GetAddress(),
             .target = targetIdx,
             .pos = viewPos,
             .camX = viewRot * Vec3(1.f, 0.f, 0.f),
