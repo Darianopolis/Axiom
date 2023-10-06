@@ -142,13 +142,6 @@ namespace axiom
         u32 texCoords;
     };
 
-    struct TriMesh : nova::RefCounted
-    {
-        std::vector<Vec3>         positionAttribs;
-        std::vector<ShadingAttrib> shadingAttribs;
-        std::vector<u32>                  indices;
-    };
-
     enum class TextureFormat
     {
         RGBA8_Srgb,
@@ -164,45 +157,46 @@ namespace axiom
         std::vector<b8> data;
     };
 
-    struct TextureChannel
+    struct Material : nova::RefCounted
     {
-        nova::Ref<TextureMap>   map;
-        std::array<i32, 4> channels{ -1, -1, -1, -1 };
-
-		TextureChannel() = default;
-
-        TextureChannel(nova::Ref<TextureMap> _map, Span<i32> _channels)
-            : map(std::move(_map))
-        {
-            std::copy(_channels.begin(), _channels.end(), channels.begin());
-        }
-    };
-
-    struct UVMaterial : nova::RefCounted
-    {
-        TextureChannel       albedo;
-        TextureChannel        alpha;
-        TextureChannel      normals;
-        TextureChannel   emissivity;
-        TextureChannel transmission;
-        TextureChannel    metalness;
-        TextureChannel    roughness;
+        nova::Ref<TextureMap>     baseColor_alpha;
+        nova::Ref<TextureMap>             normals;
+        nova::Ref<TextureMap>          emissivity;
+        nova::Ref<TextureMap>        transmission;
+        nova::Ref<TextureMap> metalness_roughness;
 
         f32 alphaCutoff = -1.f;
         bool       thin = false;
         bool subsurface = false;
     };
 
-    struct TriMeshInstance : nova::RefCounted
+    struct SubMesh
     {
-        nova::Ref<TriMesh>    mesh;
-        nova::Ref<UVMaterial> material;
-        nova::Mat4            transform;
+        u32               vertexOffset;
+        u32                  maxVertex;
+        u32                 firstIndex;
+        u32                 indexCount;
+        nova::Ref<Material> material;
+    };
+
+    struct Mesh : nova::RefCounted
+    {
+        std::vector<Vec3>         positionAttribs;
+        std::vector<ShadingAttrib> shadingAttribs;
+        std::vector<u32>                  indices;
+
+        std::vector<SubMesh> subMeshes;
+    };
+
+    struct MeshInstance : nova::RefCounted
+    {
+        nova::Ref<Mesh> mesh;
+        nova::Mat4    transform;
     };
 
     struct Scene
     {
-        std::vector<nova::Ref<TriMesh>>            meshes;
-        std::vector<nova::Ref<TriMeshInstance>> instances;
+        std::vector<nova::Ref<Mesh>>            meshes;
+        std::vector<nova::Ref<MeshInstance>> instances;
     };
 }

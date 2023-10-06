@@ -36,9 +36,9 @@ namespace axiom
         std::filesystem::path baseDir;
         std::unique_ptr<fastgltf::Asset> asset;
 
-        std::vector<nova::Ref<TriMesh>>       meshes;
+        std::vector<nova::Ref<Mesh>>       meshes;
         std::vector<nova::Ref<TextureMap>>  textures;
-        std::vector<nova::Ref<UVMaterial>> materials;
+        std::vector<nova::Ref<Material>> materials;
 
         struct ShadingAttribUnpacked {
             Vec3    normal;
@@ -121,14 +121,14 @@ namespace axiom
         impl.baseDir = std::move(baseDir);
         impl.asset = std::make_unique<fastgltf::Asset>(std::move(res.get()));
 
+        impl.ProcessTextures();
+        impl.ProcessMaterials();
         impl.ProcessMeshes();
         NOVA_LOGEXPR(impl.debug_maxTriangleVertexIndexRange);
         NOVA_LOGEXPR(impl.debug_numTrianglesToDuplicate);
         NOVA_LOG("Old Size: {}", nova::ByteSizeToString(impl.debug_oldSize));
         NOVA_LOG("New Size 1: {}", nova::ByteSizeToString(impl.debug_newSize1));
         NOVA_LOG("New Size 2: {}", nova::ByteSizeToString(impl.debug_newSize2));
-        impl.ProcessTextures();
-        impl.ProcessMaterials();
 
         if (sceneName) {
             for (auto& gltfScene : impl.asset->scenes) {
@@ -188,20 +188,28 @@ namespace axiom
         usz vertexOffset = 0;
         usz indexOffset = 0;
 
-        auto outMesh = nova::Ref<TriMesh>::Create();
+        auto outMesh = nova::Ref<Mesh>::Create();
         importer.scene->meshes.emplace_back(outMesh);
         meshes.emplace_back(outMesh);
         outMesh->positionAttribs.resize(vertexCount);
         outMesh->shadingAttribs.resize(vertexCount);
         outMesh->indices.resize(indexCount);
+        outMesh->subMeshes.reserve(primitives.size());
 
         for (auto& prim : primitives) {
+
+            auto& subMesh = outMesh->subMeshes.emplace_back();
+            subMesh.vertexOffset = u32(vertexOffset);
+            subMesh.firstIndex = u32(indexOffset);
+            if (prim->materialIndex) {
+                subMesh.material = materials[prim->materialIndex.value()];
+            }
 
             // Indices
             auto& indices = asset->accessors[prim->indicesAccessor.value()];
             fastgltf::iterateAccessorWithIndex<u32>(*asset,
                 indices, [&](u32 vIndex, usz iIndex) {
-                    outMesh->indices[indexOffset + iIndex] = u32(vertexOffset + vIndex);
+                    outMesh->indices[indexOffset + iIndex] = u32(vIndex);
                 });
 
             // Positions
@@ -210,6 +218,9 @@ namespace axiom
                 positions, [&](Vec3 pos, usz index) {
                     outMesh->positionAttribs[vertexOffset + index] = pos;
                 });
+
+            subMesh.maxVertex = u32(positions.count - 1);
+            subMesh.indexCount = u32(indices.count);
 
             shadingAttribs.resize(positions.count);
 
@@ -240,15 +251,7 @@ namespace axiom
                     });
             }
 
-            // // MatIndex
-            // {
-            //     i32 matIndex = i32(prim->materialIndex.value_or(-1));
-            //     for (u32 i = 0; i < positions.count; ++i) {
-            //         outMesh->shadingAttribs[vertexOffset + i].matIndex = matIndex;
-            //     }
-            // }
-
-            constexpr bool ReconstructNormals = false;
+            constexpr bool ReconstructNormals = true;
 
             if (ReconstructNormals)
             {
@@ -260,13 +263,13 @@ namespace axiom
                 }
 
                 auto updateNormalTangent = [&](u32 i, Vec3 normal, Vec4 tangent, f32 area) {
-                    f32 lastArea = summedAreas[i - vertexOffset];
-                    summedAreas[i - vertexOffset] += area;
+                    f32 lastArea = summedAreas[i];
+                    summedAreas[i] += area;
 
                     f32 lastWeight = lastArea / (lastArea + area);
                     f32 newWeight = 1.f - lastWeight;
 
-                    auto& v = shadingAttribs[i - vertexOffset];
+                    auto& v = shadingAttribs[i];
                     v.normal = (lastWeight * v.normal) + (newWeight * normal);
 
                     // Signed tangents
@@ -289,16 +292,16 @@ namespace axiom
                     u32 v2i = outMesh->indices[i + 1];
                     u32 v3i = outMesh->indices[i + 2];
 
-                    auto& v1 = outMesh->positionAttribs[v1i];
-                    auto& v2 = outMesh->positionAttribs[v2i];
-                    auto& v3 = outMesh->positionAttribs[v3i];
+                    auto& v1 = outMesh->positionAttribs[v1i + vertexOffset];
+                    auto& v2 = outMesh->positionAttribs[v2i + vertexOffset];
+                    auto& v3 = outMesh->positionAttribs[v3i + vertexOffset];
 
                     auto v12 = v2 - v1;
                     auto v13 = v3 - v1;
 
-                    auto& sa1 = shadingAttribs[v1i - vertexOffset];
-                    auto& sa2 = shadingAttribs[v2i - vertexOffset];
-                    auto& sa3 = shadingAttribs[v3i - vertexOffset];
+                    auto& sa1 = shadingAttribs[v1i];
+                    auto& sa2 = shadingAttribs[v2i];
+                    auto& sa3 = shadingAttribs[v3i];
 
                     auto u12 = sa2.texCoords - sa1.texCoords;
                     auto u13 = sa3.texCoords - sa1.texCoords;
@@ -486,7 +489,7 @@ namespace axiom
     {
         (void)index;
 
-        auto outMaterial = nova::Ref<UVMaterial>::Create();
+        auto outMaterial = nova::Ref<Material>::Create();
         materials.emplace_back(outMaterial);
 
         auto getImage = [&](
@@ -519,22 +522,14 @@ namespace axiom
 
         auto& pbr = material.pbrData;
 
-        auto albedoAlpha = getImage(pbr.baseColorTexture, pbr.baseColorFactor);
-        outMaterial->albedo = { albedoAlpha, { 0, 1, 2 } };
-        outMaterial->alpha = { albedoAlpha, { 3 } };
-        auto metalnessRoughness = getImage(pbr.metallicRoughnessTexture, { pbr.metallicFactor, pbr.roughnessFactor });
-        outMaterial->metalness = { metalnessRoughness, { 0 } };
-        outMaterial->roughness = { metalnessRoughness, { 1 } };
+        outMaterial->baseColor_alpha = getImage(pbr.baseColorTexture, pbr.baseColorFactor);
+        outMaterial->metalness_roughness = getImage(pbr.metallicRoughnessTexture, { pbr.metallicFactor, pbr.roughnessFactor });
 
-        outMaterial->normals = { getImage(material.normalTexture, { 0.5f, 0.5f, 1.f }), { 0, 1, 2 } };
-        outMaterial->emissivity = { getImage(material.emissiveTexture, material.emissiveFactor), { 0, 1, 2 } };
+        outMaterial->normals = getImage(material.normalTexture, { 0.5f, 0.5f, 1.f });
+        outMaterial->emissivity = getImage(material.emissiveTexture, material.emissiveFactor);
 
         if (material.transmission) {
-            outMaterial->transmission = {
-                getImage(material.transmission->transmissionTexture,
-                    { material.transmission->transmissionFactor }),
-                { 0 }
-            };
+            outMaterial->transmission = getImage(material.transmission->transmissionTexture, { material.transmission->transmissionFactor });
         }
     }
 
@@ -582,7 +577,7 @@ namespace axiom
             NOVA_LOG("  - Mesh Instance: {:>{}} -> {}", node.name, debugLongestNodeName, asset->meshes[node.meshIndex.value()].name);
 #endif // ----------------------------------------------------------------------
             importer.scene->instances.emplace_back(
-                new TriMeshInstance{ {}, meshes[node.meshIndex.value()], nullptr, transform });
+                new MeshInstance{ {}, meshes[node.meshIndex.value()], transform });
         }
 
         for (auto& childIndex : node.children) {

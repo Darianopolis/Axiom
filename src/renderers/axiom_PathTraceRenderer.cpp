@@ -10,10 +10,21 @@ namespace axiom
     {
         i32 vertexOffset;
         u32 firstIndex;
+        u32 geometryOffset;
         nova::AccelerationStructure blas;
     };
 
-    struct GPU_MeshInstance
+    // struct GPU_Material
+    // {
+    //     u32 albedo;
+    // };
+
+    struct GPU_InstanceData
+    {
+        u32 geometryOffset;
+    };
+
+    struct GPU_GeometryInfo
     {
         u64 shadingAttribs;
         u64        indices;
@@ -29,7 +40,8 @@ namespace axiom
 
         nova::Buffer            shadingAttribBuffer;
         nova::Buffer                    indexBuffer;
-        nova::Buffer             meshInstanceBuffer;
+        nova::Buffer             geometryInfoBuffer;
+        nova::Buffer             instanceDataBuffer;
         nova::HashMap<void*, CompiledMesh> meshData;
 
         nova::Buffer tlasInstanceBuffer;
@@ -69,7 +81,8 @@ namespace axiom
         shadingAttribBuffer.Destroy();
         indexBuffer.Destroy();
         tlasInstanceBuffer.Destroy();
-        meshInstanceBuffer.Destroy();
+        geometryInfoBuffer.Destroy();
+        instanceDataBuffer.Destroy();
         hitGroups.Destroy();
 
         for (auto&[p, data] : meshData) {
@@ -109,18 +122,27 @@ namespace axiom
             nova::BufferUsage::Index | nova::BufferUsage::AccelBuild,
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
+        u32 geometryCount = 0;
+
         u64 vertexOffset = 0;
         u64 indexOffset = 0;
         NOVA_LOGEXPR(scene->meshes.size());
         for (auto& mesh : scene->meshes) {
-            meshData[mesh.Raw()] = CompiledMesh{ i32(vertexOffset), u32(indexOffset) };
+            meshData[mesh.Raw()] = CompiledMesh{ i32(vertexOffset), u32(indexOffset), geometryCount };
 
             shadingAttribBuffer.Set<ShadingAttrib>(mesh->shadingAttribs, vertexOffset);
             vertexOffset += mesh->positionAttribs.size();
 
             indexBuffer.Set<u32>(mesh->indices, indexOffset);
             indexOffset += mesh->indices.size();
+
+            geometryCount += u32(mesh->subMeshes.size());
         }
+
+        geometryInfoBuffer = nova::Buffer::Create(context,
+            geometryCount * sizeof(GPU_GeometryInfo),
+            nova::BufferUsage::Storage,
+            nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
         auto builder = nova::AccelerationStructureBuilder::Create(context);
         auto scratch = nova::Buffer::Create(context, 0, nova::BufferUsage::Storage, nova::BufferFlags::DeviceLocal);
@@ -139,12 +161,6 @@ namespace axiom
                 nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
             NOVA_CLEANUP(&) { posAttribBuffer.Destroy(); };
 
-            builder.Prepare(
-                nova::AccelerationStructureType::BottomLevel,
-                nova::AccelerationStructureFlags::AllowDataAccess
-                | nova::AccelerationStructureFlags::AllowCompaction
-                | nova::AccelerationStructureFlags::PreferFastTrace, 1);
-
             // Find maximal scratch and build BLAS sizes for all meshes
 
             u64 scratchSize = 0;
@@ -153,9 +169,18 @@ namespace axiom
                 auto& mesh = scene->meshes[i];
                 auto& data = meshData.at(mesh.Raw());
 
-                builder.SetTriangles(0,
-                    posAttribBuffer.GetAddress(), nova::Format::RGB32_SFloat, u32(sizeof(Vec3)), u32(mesh->positionAttribs.size()),
-                    indexBuffer.GetAddress() + data.firstIndex * sizeof(u32), nova::IndexType::U32, u32(mesh->indices.size()) / 3);
+                builder.Prepare(
+                    nova::AccelerationStructureType::BottomLevel,
+                    nova::AccelerationStructureFlags::AllowDataAccess
+                    | nova::AccelerationStructureFlags::AllowCompaction
+                    | nova::AccelerationStructureFlags::PreferFastTrace, u32(mesh->subMeshes.size()));
+                for (u32 j = 0; j < mesh->subMeshes.size(); ++j) {
+                    auto& subMesh = mesh->subMeshes[j];
+
+                    builder.SetTriangles(j,
+                        posAttribBuffer.GetAddress() +  subMesh.vertexOffset                  * sizeof(Vec3), nova::Format::RGBA32_SFloat, u32(sizeof(Vec3)), subMesh.maxVertex,
+                            indexBuffer.GetAddress() + (subMesh.firstIndex + data.firstIndex) * sizeof(u32),  nova::IndexType::U32,                           subMesh.indexCount / 3);
+                }
 
                 scratchSize = std::max(scratchSize, builder.GetBuildScratchSize());
                 buildBlasSize = std::max(buildBlasSize, builder.GetBuildSize());
@@ -175,9 +200,23 @@ namespace axiom
                 // Load position data
 
                 posAttribBuffer.Set<Vec3>(mesh->positionAttribs);
-                builder.SetTriangles(0,
-                    posAttribBuffer.GetAddress(), nova::Format::RGB32_SFloat, u32(sizeof(Vec3)), u32(mesh->positionAttribs.size()),
-                    indexBuffer.GetAddress() + data.firstIndex * sizeof(u32), nova::IndexType::U32, u32(mesh->indices.size()) / 3);
+                builder.Prepare(
+                    nova::AccelerationStructureType::BottomLevel,
+                    nova::AccelerationStructureFlags::AllowDataAccess
+                    | nova::AccelerationStructureFlags::AllowCompaction
+                    | nova::AccelerationStructureFlags::PreferFastTrace, u32(mesh->subMeshes.size()));
+                for (u32 j = 0; j < mesh->subMeshes.size(); ++j) {
+                    auto& subMesh = mesh->subMeshes[j];
+
+                    builder.SetTriangles(j,
+                        posAttribBuffer.GetAddress() +  subMesh.vertexOffset                  * sizeof(Vec3), nova::Format::RGBA32_SFloat, u32(sizeof(Vec3)), subMesh.maxVertex,
+                            indexBuffer.GetAddress() + (subMesh.firstIndex + data.firstIndex) * sizeof(u32),  nova::IndexType::U32,                           subMesh.indexCount / 3);
+
+                    geometryInfoBuffer.Set<GPU_GeometryInfo>({{
+                        .shadingAttribs = shadingAttribBuffer.GetAddress() + (data.vertexOffset + subMesh.vertexOffset) * sizeof(ShadingAttrib),
+                        .indices        =         indexBuffer.GetAddress() + (data.firstIndex   + subMesh.firstIndex  ) * sizeof(u32),
+                    }}, data.geometryOffset + j);
+                }
 
                 // Build
 
@@ -197,8 +236,8 @@ namespace axiom
             }
         }
 
-        meshInstanceBuffer = nova::Buffer::Create(context,
-            scene->instances.size() * sizeof(GPU_MeshInstance),
+        instanceDataBuffer = nova::Buffer::Create(context,
+            scene->instances.size() * sizeof(GPU_InstanceData),
             nova::BufferUsage::Storage,
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
@@ -219,15 +258,19 @@ namespace axiom
             if (!data.blas)
                 continue;
 
-            meshInstanceBuffer.Set<GPU_MeshInstance>({{
-                .shadingAttribs = shadingAttribBuffer.GetAddress()
-                    + data.vertexOffset * sizeof(ShadingAttrib),
-                .indices = indexBuffer.GetAddress()
-                    + data.firstIndex * sizeof(u32),
-            }}, i);
+            instanceDataBuffer.Set<GPU_InstanceData>({{
+                .geometryOffset = data.geometryOffset,
+            }}, selectedInstanceCount);
 
-            builder.WriteInstance(tlasInstanceBuffer.GetMapped(), selectedInstanceCount,
-                data.blas, instance->transform, selectedInstanceCount, 0xFF, 0, {});
+            builder.WriteInstance(
+                tlasInstanceBuffer.GetMapped(),
+                selectedInstanceCount,
+                data.blas,
+                instance->transform,
+                data.geometryOffset,
+                0xFF,
+                data.geometryOffset,
+                {});
             selectedInstanceCount++;
 
 #ifdef AXIOM_TRACE_COMPILE // --------------------------------------------------
@@ -237,7 +280,13 @@ namespace axiom
         }
 
 #ifdef AXIOM_TRACE_COMPILE // --------------------------------------------------
-        NOVA_LOG("Compiling, instanced vertices = {}, instanced triangles = {}", instancedVertexCount, instancedIndexCount / 3);
+        NOVA_LOG("Compiling scene:");
+        NOVA_LOG("  vertices   = {}", vertexCount);
+        NOVA_LOG("  indices    = {}", indexCount);
+        NOVA_LOG("  meshes     = {}", scene->meshes.size());
+        NOVA_LOG("  geometries = {}", geometryCount);
+        NOVA_LOG("  instances  = {}", scene->instances.size());
+        NOVA_LOG("  triangles  = {}", instancedIndexCount / 3);
 #endif // ----------------------------------------------------------------------
 
         {
@@ -306,19 +355,24 @@ namespace axiom
                     uint value;
                 };
 
-                layout(buffer_reference, scalar, buffer_reference_align = 8) readonly buffer MeshInstance {
+                layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer InstanceData {
+                    uint geometryOffset;
+                };
+
+                layout(buffer_reference, scalar, buffer_reference_align = 8) readonly buffer GeometryInfo {
                     ShadingAttrib shadingAttribs;
                     Index                indices;
                 };
 
                 layout(push_constant, scalar) uniform pc_ {
-                    uint64_t          tlas;
-                    MeshInstance instances;
-                    uint            target;
-                    vec3               pos;
-                    vec3              camX;
-                    vec3              camY;
-                    float       camZOffset;
+                    uint64_t           tlas;
+                    GeometryInfo geometries;
+                    InstanceData  instances;
+                    uint             target;
+                    vec3                pos;
+                    vec3               camX;
+                    vec3               camY;
+                    float        camZOffset;
                 } pc;
 
                 float PI = 3.14159265358979323846264338327950288419716939937510;
@@ -422,7 +476,7 @@ namespace axiom
                         0,       // Flags
                         0xFF,    // Hit Mask
                         0,       // sbtOffset
-                        0,       // sbtStride
+                        1,       // sbtStride
                         0,       // missOffset
                         pc.pos,  // rayOrigin
                         0.0,     // tMin
@@ -437,11 +491,14 @@ namespace axiom
                     if (hitObjectIsHitNV(hit)) {
 
                         // Hit Attributes
-                        int instanceID = hitObjectGetInstanceCustomIndexNV(hit);
-                        int primitiveID = hitObjectGetInstanceCustomIndexNV(hit);
+                        int instanceID = hitObjectGetInstanceIdNV(hit);
+                        int customInstanceID = hitObjectGetInstanceCustomIndexNV(hit);
                         int geometryIndex = hitObjectGetGeometryIndexNV(hit);
+                        uint sbtIndex = hitObjectGetShaderBindingTableRecordIndexNV(hit);
                         uint hitKind = hitObjectGetHitKindNV(hit);
-                        MeshInstance instance = pc.instances[instanceID];
+                        // GeometryInfo geometry = pc.geometries[sbtIndex];
+                        // GeometryInfo geometry = pc.geometries[pc.instances[instanceID].geometryOffset + geometryIndex];
+                        GeometryInfo geometry = pc.geometries[customInstanceID + geometryIndex];
 
                         // Transforms
                         mat4x3 objToWorld = hitObjectGetObjectToWorldNV(hit);
@@ -453,14 +510,14 @@ namespace axiom
 
                         // Indices
                         uint primID = hitObjectGetPrimitiveIndexNV(hit);
-                        uint i0 = instance.indices[primID * 3 + 0].value;
-                        uint i1 = instance.indices[primID * 3 + 1].value;
-                        uint i2 = instance.indices[primID * 3 + 2].value;
+                        uint i0 = geometry.indices[primID * 3 + 0].value;
+                        uint i1 = geometry.indices[primID * 3 + 1].value;
+                        uint i2 = geometry.indices[primID * 3 + 2].value;
 
                         // Shading attributes
-                        ShadingAttrib sa0 = instance.shadingAttribs[i0];
-                        ShadingAttrib sa1 = instance.shadingAttribs[i1];
-                        ShadingAttrib sa2 = instance.shadingAttribs[i2];
+                        ShadingAttrib sa0 = geometry.shadingAttribs[i0];
+                        ShadingAttrib sa1 = geometry.shadingAttribs[i1];
+                        ShadingAttrib sa2 = geometry.shadingAttribs[i2];
 
                         // Normals
                         vec3 nrm0 = SignedOctDecode(sa0.tgtSpace);
@@ -535,11 +592,13 @@ namespace axiom
         pipeline.Update(rayGenShader, {}, { { closestHitShader } }, {});
 
         hitGroups = nova::Buffer::Create(context,
-            pipeline.GetTableSize(1),
+            pipeline.GetTableSize(geometryCount),
             nova::BufferUsage::ShaderBindingTable,
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
-        pipeline.WriteHandle(hitGroups.GetMapped(), 0, 0);
+        for (u32 i = 0; i < geometryCount; ++i) {
+            pipeline.WriteHandle(hitGroups.GetMapped(), i, 0);
+        }
     }
 
     void PathTraceRenderer::SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov)
@@ -558,6 +617,7 @@ namespace axiom
         struct PushConstants
         {
             u64       tlas;
+            u64 geometries;
             u64  instances;
             u32     target;
             Vec3       pos;
@@ -568,7 +628,8 @@ namespace axiom
 
         cmd.PushConstants(PushConstants {
             .tlas = tlas.GetAddress(),
-            .instances = meshInstanceBuffer.GetAddress(),
+            .geometries = geometryInfoBuffer.GetAddress(),
+            .instances = instanceDataBuffer.GetAddress(),
             .target = targetIdx,
             .pos = viewPos,
             .camX = viewRot * Vec3(1.f, 0.f, 0.f),
