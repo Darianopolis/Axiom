@@ -435,22 +435,21 @@ namespace axiom
 
                     vec3 color = vec3(0.1);
                     if (hitObjectIsHitNV(hit)) {
+
+                        // Hit Attributes
                         int instanceID = hitObjectGetInstanceCustomIndexNV(hit);
                         int primitiveID = hitObjectGetInstanceCustomIndexNV(hit);
                         int geometryIndex = hitObjectGetGeometryIndexNV(hit);
                         uint hitKind = hitObjectGetHitKindNV(hit);
+                        MeshInstance instance = pc.instances[instanceID];
 
+                        // Transforms
                         mat4x3 objToWorld = hitObjectGetObjectToWorldNV(hit);
                         mat3x3 tgtSpaceToWorld = transpose(inverse(mat3(objToWorld)));
 
-                        hitObjectGetAttributesNV(hit, 0);
-                        hitObjectExecuteShaderNV(hit, 0);
-
                         // Barycentric weights
+                        hitObjectGetAttributesNV(hit, 0);
                         vec3 w = vec3(1.0 - bary.x - bary.y, bary.x, bary.y);
-
-                        // Instance
-                        MeshInstance instance = pc.instances[instanceID];
 
                         // Indices
                         uint primID = hitObjectGetPrimitiveIndexNV(hit);
@@ -484,6 +483,7 @@ namespace axiom
                         vec2 uv = uv0 * w.x + uv1 * w.y + uv2 * w.z;
 
                         // Positions (local)
+                        hitObjectExecuteShaderNV(hit, 0);
                         vec3 v0 = rayPayload.position[0];
                         vec3 v1 = rayPayload.position[1];
                         vec3 v2 = rayPayload.position[2];
@@ -492,6 +492,7 @@ namespace axiom
                         vec3 v0w = objToWorld * vec4(v0, 1);
                         vec3 v1w = objToWorld * vec4(v1, 1);
                         vec3 v2w = objToWorld * vec4(v2, 1);
+                        vec3 pos = v0w * w.x + v1w * w.y + v2w * w.z;
 
                         // Flat normal
                         vec3 v01 = v1w - v0w;
@@ -506,8 +507,8 @@ namespace axiom
 
 // -----------------------------------------------------------------------------
 // #define DEBUG_UV
-#define DEBUG_FLAT_NRM
-// #define DEBUG_NRM
+// #define DEBUG_FLAT_NRM
+#define DEBUG_NRM
 // #define DEBUG_TGT
 // #define DEBUG_BARY
 // -----------------------------------------------------------------------------
@@ -531,10 +532,10 @@ namespace axiom
             )glsl"}));
 
         pipeline = nova::RayTracingPipeline::Create(context);
-        pipeline.Update({ rayGenShader }, {}, { { closestHitShader } }, {});
+        pipeline.Update(rayGenShader, {}, { { closestHitShader } }, {});
 
         hitGroups = nova::Buffer::Create(context,
-            pipeline.GetShaderBindingTableSize(1),
+            pipeline.GetTableSize(1),
             nova::BufferUsage::ShaderBindingTable,
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
@@ -575,6 +576,6 @@ namespace axiom
             .camZOffset = 1.f / glm::tan(0.5f * viewFov),
         });
 
-        cmd.TraceRays(pipeline, target.GetExtent(), 0, hitGroups.GetAddress(), 1);
+        cmd.TraceRays(pipeline, target.GetExtent(), hitGroups.GetAddress(), 1);
     }
 }

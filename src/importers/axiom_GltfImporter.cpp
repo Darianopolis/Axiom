@@ -213,36 +213,22 @@ namespace axiom
 
             shadingAttribs.resize(positions.count);
 
-            // // Normals
-            // if (auto normals = prim->findAttribute("NORMAL"); normals != prim->attributes.end()) {
-            //     auto& accessor = asset->accessors[normals->second];
-            //     inTgtSpaces.resize(accessor.count);
-            //     fastgltf::iterateAccessorWithIndex<Vec3>(*asset,
-            //         accessor, [&](Vec3 normal, usz index) {
-            //             (void)normal, (void)index;
+            // Normals
+            if (auto normals = prim->findAttribute("NORMAL"); normals != prim->attributes.end()) {
+                auto& accessor = asset->accessors[normals->second];
+                fastgltf::iterateAccessorWithIndex<Vec3>(*asset,
+                    accessor, [&](Vec3 normal, usz index) {
+                        shadingAttribs[index].normal = normal;
+                    });
+            }
 
-            //             // inTgtSpaces[index].normal = normal;
-
-            //             // outMesh->shadingAttribs[vertexOffset + index].nrm = glm::normalize(normal);
-
-            //             // auto& attrib = outMesh->shadingAttribs[vertexOffset + index];
-            //             // auto encoded = math::SignedOctEncode(normal);
-            //             // attrib.octX = u32(encoded.x * 1023);
-            //             // attrib.octY = u32(encoded.y * 1023);
-            //             // attrib.octS = u32(encoded.z);
-            //         });
-            // }
-
-            // // Tangents
-            // if (auto tangents = prim->findAttribute("TANGENT"); tangents != prim->attributes.end()) {
-            //     fastgltf::iterateAccessorWithIndex<Vec4>(*asset,
-            //         asset->accessors[tangents->second], [&](Vec4 tangent, usz index) {
-            //             (void)tangent, (void)index;
-
-            //             // f32 encoded = math::EncodeTangent(inNormals[index], tangent);
-            //             // outMesh->shadingAttribs[vertexOffset + index].tgtA = u32(encoded * 1023);
-            //         });
-            // }
+            // Tangents
+            if (auto tangents = prim->findAttribute("TANGENT"); tangents != prim->attributes.end()) {
+                fastgltf::iterateAccessorWithIndex<Vec4>(*asset,
+                    asset->accessors[tangents->second], [&](Vec4 tangent, usz index) {
+                        shadingAttribs[index].tangent = tangent;
+                    });
+            }
 
             // TexCoords (1)
             if (auto texCoords = prim->findAttribute("TEXCOORD_0"); texCoords != prim->attributes.end()) {
@@ -262,6 +248,9 @@ namespace axiom
             //     }
             // }
 
+            constexpr bool ReconstructNormals = false;
+
+            if (ReconstructNormals)
             {
                 summedAreas.resize(shadingAttribs.size());
 
@@ -294,7 +283,7 @@ namespace axiom
 
                 // std::vector<bool> keepPrim(indices.count / 3);
 
-                for (u32 i = u32(indexOffset); i < outMesh->indices.size(); i += 3)
+                for (u32 i = u32(indexOffset); i < indexOffset + indices.count; i += 3)
                 {
                     u32 v1i = outMesh->indices[i + 0];
                     u32 v2i = outMesh->indices[i + 1];
@@ -332,8 +321,8 @@ namespace axiom
                     auto normal = glm::normalize(cross);
 
                     Vec4 tangent = glm::dot(glm::cross(normal, T), bitangent) >= 0.f
-                        ? Vec4(T,  1.f)
-                        : Vec4(T, -1.f);
+                        ? Vec4(T, 1.f)
+                        : Vec4(T, 0.f);
 
                     if (area)
                     {
@@ -344,7 +333,9 @@ namespace axiom
                         updateNormalTangent(v3i, normal, tangent, area);
                     }
                 }
+            }
 
+            {
                 // TODO: Filter primitives
 
                 for (u32 i = 0; i < shadingAttribs.size(); ++i) {
@@ -358,7 +349,9 @@ namespace axiom
                     saPacked.octY = u32(encNormal.y * 1023.0);
                     saPacked.octS = u32(encNormal.z);
 
-                    saPacked.tgtA = u32(math::EncodeTangent(saUnpacked.normal, saUnpacked.tangent) * 1023.0);
+                    auto encTangent = math::EncodeTangent(saUnpacked.normal, saUnpacked.tangent);
+                    saPacked.tgtA = u32(encTangent * 1023.0);
+                    saPacked.tgtS = u32(saUnpacked.tangent.w);
                 }
             }
 
@@ -421,7 +414,9 @@ namespace axiom
                         reinterpret_cast<const unsigned char*>(bytes), i32(view.byteLength),
                         &width, &height, &channels, STBI_rgb_alpha);
                 },
-                [&](auto&) {},
+                [&](auto&) {
+                    NOVA_THROW("Unknown image source: {}", gltfImage.data.index());
+                },
             }, gltfImage.data);
 
             if (imageData) {
@@ -499,7 +494,7 @@ namespace axiom
                 Span<f32> factor) {
 
             if (texture) {
-                return textures[material.pbrData.baseColorTexture->textureIndex];
+                return textures[texture->textureIndex];
             }
 
             std::array<u8, 4> data { 0, 0, 0, 255 };
