@@ -63,9 +63,11 @@ int main(int argc, char* argv[])
     auto queue = context.GetQueue(nova::QueueFlags::Graphics, 0);
     auto fence = nova::Fence::Create(context);
     auto heap = nova::DescriptorHeap::Create(context, 1024 * 1024);
+    nova::IndexFreeList heapSlots;
     auto cmdPool = nova::CommandPool::Create(context, queue);
     auto sampler = nova::Sampler::Create(context, nova::Filter::Linear,
         nova::AddressMode::Repeat, nova::BorderColor::TransparentBlack, 0.f);
+    auto samplerIdx = heapSlots.Acquire();
     NOVA_CLEANUP(&) {
         fence.Wait();
         cmdPool.Destroy();
@@ -75,7 +77,7 @@ int main(int argc, char* argv[])
         context.Destroy();
     };
 
-    heap.WriteSampler(1, sampler);
+    heap.WriteSampler(samplerIdx, sampler);
 
 // -----------------------------------------------------------------------------
     NOVA_TIMEIT("init-vulkan");
@@ -84,9 +86,9 @@ int main(int argc, char* argv[])
 
     nova::Ref<axiom::Renderer> renderer;
     if (type == "--path-trace") {
-        renderer = axiom::CreatePathTraceRenderer(context);
+        renderer = axiom::CreatePathTraceRenderer(context, heap, &heapSlots);
     } else if (type == "--raster") {
-        renderer = axiom::CreateRasterRenderer(context);
+        renderer = axiom::CreateRasterRenderer(context, heap, &heapSlots);
     }
     renderer->CompileScene(scene, cmdPool, fence);
 
@@ -113,12 +115,13 @@ int main(int argc, char* argv[])
         swapchain.Destroy();
     };
 
+    auto fontIdx = heapSlots.Acquire();
     auto imgui = nova::ImGuiLayer({
         .window = window,
         .context = context,
         .heap = heap,
-        .sampler = 1,
-        .fontTextureID = 2,
+        .sampler = samplerIdx,
+        .fontTextureID = fontIdx,
     });
 
 // -----------------------------------------------------------------------------
@@ -138,6 +141,8 @@ int main(int argc, char* argv[])
     POINT savedPos{ 0, 0 };
     bool lastMouseDrag = false;
     f32 mouseSpeed = 0.0025f;
+
+    auto swapchainIdx = heapSlots.Acquire();
 
     glfwSetScrollCallback(window, [](auto, f64, f64 dy) {
         if (dy > 0) moveSpeed *= 1.5f;
@@ -226,9 +231,9 @@ int main(int argc, char* argv[])
         cmd.BindDescriptorHeap(nova::BindPoint::Graphics, heap);
         cmd.BindDescriptorHeap(nova::BindPoint::Compute, heap);
         cmd.BindDescriptorHeap(nova::BindPoint::RayTracing, heap);
-        heap.WriteStorageTexture(0, swapchain.GetCurrent());
+        heap.WriteStorageTexture(swapchainIdx, swapchain.GetCurrent());
 
-        renderer->Record(cmd, swapchain.GetCurrent(), 0);
+        renderer->Record(cmd, swapchain.GetCurrent(), swapchainIdx);
 
         // UI
 

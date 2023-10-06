@@ -2,6 +2,7 @@
 
 #include "axiom_Scene.hpp"
 
+#include <nova/core/nova_SubAllocation.hpp>
 #include <nova/rhi/nova_RHI.hpp>
 
 namespace axiom
@@ -19,6 +20,6 @@ namespace axiom
     inline
     Renderer::~Renderer() {}
 
-    nova::Ref<Renderer> CreateRasterRenderer(nova::Context context);
-    nova::Ref<Renderer> CreatePathTraceRenderer(nova::Context context);
+    nova::Ref<Renderer> CreateRasterRenderer(nova::Context context, nova::DescriptorHeap heap, nova::IndexFreeList* heapSlots);
+    nova::Ref<Renderer> CreatePathTraceRenderer(nova::Context context, nova::DescriptorHeap heap, nova::IndexFreeList* heapSlots);
 }

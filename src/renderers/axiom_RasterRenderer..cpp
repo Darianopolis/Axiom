@@ -1,5 +1,6 @@
 #include "axiom_Renderer.hpp"
 
+#include <nova/core/nova_SubAllocation.hpp>
 #include <nova/rhi/vulkan/glsl/nova_VulkanGlsl.hpp>
 
 namespace axiom
@@ -52,8 +53,10 @@ namespace axiom
         virtual void Record(nova::CommandList cmd, nova::Texture target, u32 targetIdx);
     };
 
-    nova::Ref<Renderer> CreateRasterRenderer(nova::Context context)
+    nova::Ref<Renderer> CreateRasterRenderer(nova::Context context, nova::DescriptorHeap heap, nova::IndexFreeList* heapSlots)
     {
+        (void)heap, (void)heapSlots;
+
         auto renderer = nova::Ref<RasterRenderer>::Create();
         renderer->context = context;
         return renderer;

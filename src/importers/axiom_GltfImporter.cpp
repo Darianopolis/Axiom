@@ -33,14 +33,15 @@ namespace axiom
     {
         GltfImporter& importer;
 
-        std::filesystem::path baseDir;
+        std::filesystem::path          baseDir;
         std::unique_ptr<fastgltf::Asset> asset;
 
-        std::vector<nova::Ref<Mesh>>       meshes;
-        std::vector<nova::Ref<TextureMap>>  textures;
-        std::vector<nova::Ref<Material>> materials;
+        std::vector<nova::Ref<Mesh>>         meshes;
+        std::vector<nova::Ref<TextureMap>> textures;
+        std::vector<nova::Ref<Material>>  materials;
 
-        struct ShadingAttribUnpacked {
+        struct ShadingAttribUnpacked
+        {
             Vec3    normal;
             Vec2 texCoords;
             Vec4   tangent;
@@ -251,7 +252,7 @@ namespace axiom
                     });
             }
 
-            constexpr bool ReconstructNormals = true;
+            constexpr bool ReconstructNormals = false;
 
             if (ReconstructNormals)
             {
@@ -373,6 +374,9 @@ namespace axiom
         for (u32 i = 0; i < asset->textures.size(); ++i) {
             ProcessTexture(i, asset->textures[i]);
         }
+        for (auto& tex : textures) {
+            importer.scene->textures.emplace_back(tex);
+        }
     }
 
     void GltfImporterImpl::ProcessTexture(u32 index, fastgltf::Texture& texture)
@@ -491,6 +495,7 @@ namespace axiom
 
         auto outMaterial = nova::Ref<Material>::Create();
         materials.emplace_back(outMaterial);
+        importer.scene->materials.emplace_back(outMaterial);
 
         auto getImage = [&](
                 const std::optional<fastgltf::TextureInfo>& texture,
@@ -515,6 +520,7 @@ namespace axiom
             image->data = { b8(data[0]), b8(data[1]), b8(data[2]), b8(data[3]) };
 
             textures.push_back(image);
+            importer.scene->textures.emplace_back(image);
             singlePixelTextures.insert({ encoded, u32(textures.size() - 1) });
 
             return image;

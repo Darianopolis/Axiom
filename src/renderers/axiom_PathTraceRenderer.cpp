@@ -1,6 +1,7 @@
 #include "axiom_Renderer.hpp"
 
 #include <nova/rhi/vulkan/glsl/nova_VulkanGlsl.hpp>
+#include <nova/core/nova_SubAllocation.hpp>
 
 #include <nova/rhi/vulkan/nova_VulkanRHI.hpp>
 
@@ -8,16 +9,22 @@ namespace axiom
 {
     struct CompiledMesh
     {
-        i32 vertexOffset;
-        u32 firstIndex;
-        u32 geometryOffset;
+        i32                 vertexOffset;
+        u32                   firstIndex;
+        u32               geometryOffset;
         nova::AccelerationStructure blas;
     };
 
-    // struct GPU_Material
-    // {
-    //     u32 albedo;
-    // };
+    struct LoadedTexture
+    {
+        nova::Texture         texture;
+        nova::DescriptorHandle handle;
+    };
+
+    struct GPU_Material
+    {
+        nova::DescriptorHandle baseColor_alpha;
+    };
 
     struct GPU_InstanceData
     {
@@ -28,15 +35,25 @@ namespace axiom
     {
         u64 shadingAttribs;
         u64        indices;
+        u64       material;
     };
 
     struct PathTraceRenderer : Renderer
     {
         Scene* scene = nullptr;
 
-        nova::Context context;
+        nova::Context          context;
+        nova::DescriptorHeap      heap;
+        nova::IndexFreeList* heapSlots;
 
         nova::AccelerationStructure tlas;
+
+        nova::Sampler             linearSampler;
+        nova::DescriptorHandle linearSamplerIdx;
+
+        nova::Buffer                        materialBuffer;
+        nova::HashMap<void*, u64>        materialAddresses;
+        nova::HashMap<void*, LoadedTexture> loadedTextures;
 
         nova::Buffer            shadingAttribBuffer;
         nova::Buffer                    indexBuffer;
@@ -58,16 +75,24 @@ namespace axiom
         PathTraceRenderer();
         ~PathTraceRenderer();
 
+        void CompileMaterials(nova::CommandPool cmdPool, nova::Fence fence);
+
         virtual void CompileScene(Scene& scene, nova::CommandPool cmdPool, nova::Fence fence);
 
         virtual void SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov);
         virtual void Record(nova::CommandList cmd, nova::Texture target, u32 targetIdx);
     };
 
-    nova::Ref<Renderer> CreatePathTraceRenderer(nova::Context context)
+    nova::Ref<Renderer> CreatePathTraceRenderer(nova::Context context, nova::DescriptorHeap heap, nova::IndexFreeList* heapSlots)
     {
         auto renderer = nova::Ref<PathTraceRenderer>::Create();
         renderer->context = context;
+        renderer->heap = heap;
+        renderer->heapSlots = heapSlots;
+
+        renderer->linearSampler = nova::Sampler::Create(context, nova::Filter::Linear, nova::AddressMode::Repeat, nova::BorderColor::TransparentBlack, 16.f);
+        renderer->linearSamplerIdx = heapSlots->Acquire();
+
         return renderer;
     }
 
@@ -90,14 +115,64 @@ namespace axiom
         }
         tlas.Destroy();
 
+        materialBuffer.Destroy();
+        for (auto&[p, texture] : loadedTextures) {
+            texture.texture.Destroy();
+            heapSlots->Release(texture.handle.id);
+        }
+
         closestHitShader.Destroy();
         rayGenShader.Destroy();
         pipeline.Destroy();
     }
 
+    void PathTraceRenderer::CompileMaterials(nova::CommandPool cmdPool, nova::Fence fence)
+    {
+        (void)cmdPool, (void)fence;
+
+        for (auto& texture : scene->textures) {
+            auto& loadedTexture = loadedTextures[texture.Raw()];
+            loadedTexture.texture = nova::Texture::Create(context,
+                Vec3U(texture->size, 0),
+                nova::TextureUsage::Sampled,
+                nova::Format::RGBA8_UNorm,
+                {});
+
+            loadedTexture.texture.Set({}, loadedTexture.texture.GetExtent(),
+                texture->data.data());
+
+            loadedTexture.handle = heapSlots->Acquire();
+            heap.WriteSampledTexture(loadedTexture.handle, loadedTexture.texture);
+
+            NOVA_LOG("Compiled texture, obj = {}, idx = {}",
+                std::bit_cast<void*>(loadedTexture.texture),
+                loadedTexture.handle.ToShaderUInt());
+        }
+
+        materialBuffer = nova::Buffer::Create(context,
+            scene->materials.size() * sizeof(GPU_Material),
+            nova::BufferUsage::Storage,
+            nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
+
+        for (u32 i = 0; i < scene->materials.size(); ++i) {
+            auto& material = scene->materials[i];
+
+            u64 address = materialBuffer.GetAddress() + (i * sizeof(GPU_Material));
+            materialAddresses[material.Raw()] = address;
+
+            materialBuffer.Set<GPU_Material>({{
+                .baseColor_alpha = loadedTextures.at(material->baseColor_alpha.Raw()).handle,
+            }}, i);
+
+            NOVA_LOG("Compiled material, address = {}", address);
+        }
+    }
+
     void PathTraceRenderer::CompileScene(Scene& _scene, nova::CommandPool cmdPool, nova::Fence fence)
     {
         scene = &_scene;
+
+        CompileMaterials(cmdPool, fence);
 
         u64 vertexCount = 0;
         u64 maxPerBlasVertexCount = 0;
@@ -214,7 +289,8 @@ namespace axiom
 
                     geometryInfoBuffer.Set<GPU_GeometryInfo>({{
                         .shadingAttribs = shadingAttribBuffer.GetAddress() + (data.vertexOffset + subMesh.vertexOffset) * sizeof(ShadingAttrib),
-                        .indices        =         indexBuffer.GetAddress() + (data.firstIndex   + subMesh.firstIndex  ) * sizeof(u32),
+                        .indices =                indexBuffer.GetAddress() + (data.firstIndex   + subMesh.firstIndex  ) * sizeof(u32),
+                        .material = materialAddresses.at(subMesh.material.Raw()),
                     }}, data.geometryOffset + j);
                 }
 
@@ -339,6 +415,9 @@ namespace axiom
 
                 layout(set = 0, binding = 0) uniform image2D RWImage2D[];
 
+                layout(set = 0, binding = 0) uniform texture2D Image2D[];
+                layout(set = 0, binding = 0) uniform sampler Sampler[];
+
                 struct RayPayload {
                     vec3 position[3];
                 };
@@ -355,6 +434,10 @@ namespace axiom
                     uint value;
                 };
 
+                layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer Material {
+                    uint baseColor_alpha;
+                };
+
                 layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer InstanceData {
                     uint geometryOffset;
                 };
@@ -362,6 +445,7 @@ namespace axiom
                 layout(buffer_reference, scalar, buffer_reference_align = 8) readonly buffer GeometryInfo {
                     ShadingAttrib shadingAttribs;
                     Index                indices;
+                    Material            material;
                 };
 
                 layout(push_constant, scalar) uniform pc_ {
@@ -373,6 +457,7 @@ namespace axiom
                     vec3               camX;
                     vec3               camY;
                     float        camZOffset;
+                    uint      linearSampler;
                 } pc;
 
                 float PI = 3.14159265358979323846264338327950288419716939937510;
@@ -562,10 +647,13 @@ namespace axiom
                             flatNrm = -flatNrm;
                         }
 
+                        // Texture
+                        vec4 baseColor_alpha = texture(sampler2D(Image2D[geometry.material.baseColor_alpha], Sampler[pc.linearSampler]), uv);
+
 // -----------------------------------------------------------------------------
 // #define DEBUG_UV
 // #define DEBUG_FLAT_NRM
-#define DEBUG_NRM
+// #define DEBUG_NRM
 // #define DEBUG_TGT
 // #define DEBUG_BARY
 // -----------------------------------------------------------------------------
@@ -581,7 +669,7 @@ namespace axiom
 #elif defined(DEBUG_BARY)
                         color = vec3(1.0 - bary.x - bary.y, bary.x, bary.y);
 #else
-                        color = vec3(1, 0, 0);
+                        color = baseColor_alpha.rgb;
 #endif
                     }
                     imageStore(RWImage2D[pc.target], ivec2(gl_LaunchIDEXT.xy), vec4(color, 1));
@@ -619,11 +707,15 @@ namespace axiom
             u64       tlas;
             u64 geometries;
             u64  instances;
-            u32     target;
+
+            u32 target;
+
             Vec3       pos;
             Vec3      camX;
             Vec3      camY;
             f32 camZOffset;
+
+            nova::DescriptorHandle linearSampler;
         };
 
         cmd.PushConstants(PushConstants {
@@ -635,6 +727,7 @@ namespace axiom
             .camX = viewRot * Vec3(1.f, 0.f, 0.f),
             .camY = viewRot * Vec3(0.f, 1.f, 0.f),
             .camZOffset = 1.f / glm::tan(0.5f * viewFov),
+            .linearSampler = linearSamplerIdx,
         });
 
         cmd.TraceRays(pipeline, target.GetExtent(), hitGroups.GetAddress(), 1);

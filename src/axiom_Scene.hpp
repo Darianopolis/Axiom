@@ -196,6 +196,8 @@ namespace axiom
 
     struct Scene
     {
+        std::vector<nova::Ref<TextureMap>>    textures;
+        std::vector<nova::Ref<Material>>     materials;
         std::vector<nova::Ref<Mesh>>            meshes;
         std::vector<nova::Ref<MeshInstance>> instances;
     };
