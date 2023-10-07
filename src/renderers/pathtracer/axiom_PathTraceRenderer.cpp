@@ -23,7 +23,17 @@ namespace axiom
 
     struct GPU_Material
     {
-        nova::DescriptorHandle baseColor_alpha;
+        nova::DescriptorHandle     baseColor_alpha;
+        nova::DescriptorHandle             normals;
+        nova::DescriptorHandle          emissivity;
+        nova::DescriptorHandle        transmission;
+        nova::DescriptorHandle metalness_roughness;
+
+        f32 alphaCutoff = 0.5f;
+        bool  alphaMask = false;
+        bool alphaBlend = false;
+        bool       thin = false;
+        bool subsurface = false;
     };
 
     struct GPU_InstanceData
@@ -65,6 +75,7 @@ namespace axiom
 
         nova::RayTracingPipeline pipeline;
         nova::Buffer            hitGroups;
+        nova::Shader         anyHitShader;
         nova::Shader     closestHitShader;
         nova::Shader         rayGenShader;
 
@@ -121,6 +132,7 @@ namespace axiom
             heapSlots->Release(texture.handle.id);
         }
 
+        anyHitShader.Destroy();
         closestHitShader.Destroy();
         rayGenShader.Destroy();
         pipeline.Destroy();
@@ -131,7 +143,13 @@ namespace axiom
         (void)cmdPool, (void)fence;
 
         for (auto& texture : scene->textures) {
-            auto& loadedTexture = loadedTextures[texture.Raw()];
+            loadedTextures.insert({ texture.Raw(), {} });
+        }
+
+#pragma omp parallel for
+        for (u32 i = 0; i < scene->textures.size(); ++i) {
+            auto& texture = scene->textures[i];
+            auto& loadedTexture = loadedTextures.at(texture.Raw());
             loadedTexture.texture = nova::Texture::Create(context,
                 Vec3U(texture->size, 0),
                 nova::TextureUsage::Sampled,
@@ -141,12 +159,11 @@ namespace axiom
             loadedTexture.texture.Set({}, loadedTexture.texture.GetExtent(),
                 texture->data.data());
 
-            loadedTexture.handle = heapSlots->Acquire();
-            heap.WriteSampledTexture(loadedTexture.handle, loadedTexture.texture);
-
-            NOVA_LOG("Compiled texture, obj = {}, idx = {}",
-                std::bit_cast<void*>(loadedTexture.texture),
-                loadedTexture.handle.ToShaderUInt());
+#pragma omp critical
+            {
+                loadedTexture.handle = heapSlots->Acquire();
+                heap.WriteSampledTexture(loadedTexture.handle, loadedTexture.texture);
+            }
         }
 
         materialBuffer = nova::Buffer::Create(context,
@@ -161,10 +178,18 @@ namespace axiom
             materialAddresses[material.Raw()] = address;
 
             materialBuffer.Set<GPU_Material>({{
-                .baseColor_alpha = loadedTextures.at(material->baseColor_alpha.Raw()).handle,
-            }}, i);
+                .baseColor_alpha     = loadedTextures.at(material->baseColor_alpha.Raw()    ).handle,
+                .normals             = loadedTextures.at(material->normals.Raw()            ).handle,
+                .emissivity          = loadedTextures.at(material->emissivity.Raw()         ).handle,
+                .transmission        = loadedTextures.at(material->transmission.Raw()       ).handle,
+                .metalness_roughness = loadedTextures.at(material->metalness_roughness.Raw()).handle,
 
-            NOVA_LOG("Compiled material, address = {}", address);
+                .alphaCutoff = material->alphaCutoff,
+                .alphaMask   = material->alphaMask,
+                .alphaBlend  = material->alphaBlend,
+                .thin        = material->thin,
+                .subsurface  = material->subsurface,
+            }}, i);
         }
     }
 
@@ -172,7 +197,31 @@ namespace axiom
     {
         scene = &_scene;
 
+        // Shaders
+
+        anyHitShader = nova::Shader::Create(context, nova::ShaderStage::AnyHit, "main",
+            nova::glsl::Compile(nova::ShaderStage::AnyHit, "src/renderers/pathtracer/axiom_AnyHit.glsl", {}));
+
+        closestHitShader = nova::Shader::Create(context, nova::ShaderStage::ClosestHit, "main",
+            nova::glsl::Compile(nova::ShaderStage::ClosestHit, "src/renderers/pathtracer/axiom_ClosestHit.glsl", {}));
+
+        rayGenShader = nova::Shader::Create(context, nova::ShaderStage::RayGen, "main",
+            nova::glsl::Compile(nova::ShaderStage::RayGen, "src/renderers/pathtracer/axiom_RayGen.glsl", {}));
+
+        constexpr u32 SBT_Opaque      = 0;
+        constexpr u32 SBT_AlphaMasked = 1;
+
+        pipeline = nova::RayTracingPipeline::Create(context);
+        pipeline.Update(rayGenShader, {}, {
+            { closestHitShader               }, // Opaque
+            { closestHitShader, anyHitShader }, // Alpha-tested
+        }, {});
+
+        // Materials
+
         CompileMaterials(cmdPool, fence);
+
+        // Geometry
 
         u64 vertexCount = 0;
         u64 maxPerBlasVertexCount = 0;
@@ -217,6 +266,11 @@ namespace axiom
         geometryInfoBuffer = nova::Buffer::Create(context,
             geometryCount * sizeof(GPU_GeometryInfo),
             nova::BufferUsage::Storage,
+            nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
+
+        hitGroups = nova::Buffer::Create(context,
+            pipeline.GetTableSize(geometryCount),
+            nova::BufferUsage::ShaderBindingTable,
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
         auto builder = nova::AccelerationStructureBuilder::Create(context);
@@ -284,16 +338,30 @@ namespace axiom
 
                 for (u32 j = 0; j < mesh->subMeshes.size(); ++j) {
                     auto& subMesh = mesh->subMeshes[j];
+                    auto geometryIndex = data.geometryOffset + j;
+
+                    // Add geometry to build
 
                     builder.SetTriangles(j,
                         posAttribBuffer.GetAddress() +  subMesh.vertexOffset                  * sizeof(Vec3), nova::Format::RGBA32_SFloat, u32(sizeof(Vec3)), subMesh.maxVertex,
                             indexBuffer.GetAddress() + (subMesh.firstIndex + data.firstIndex) * sizeof(u32),  nova::IndexType::U32,                           subMesh.indexCount / 3);
 
+                    // Store geometry offsets and material
+
                     geometryInfoBuffer.Set<GPU_GeometryInfo>({{
                         .shadingAttribs = shadingAttribBuffer.GetAddress() + (data.vertexOffset + subMesh.vertexOffset) * sizeof(ShadingAttrib),
                         .indices =                indexBuffer.GetAddress() + (data.firstIndex   + subMesh.firstIndex  ) * sizeof(u32),
                         .material = materialAddresses.at(subMesh.material.Raw()),
-                    }}, data.geometryOffset + j);
+                    }}, geometryIndex);
+
+                    // Bind shaders
+
+                    u32 sbtIndex = SBT_Opaque;
+                    if (subMesh.material->alphaMask
+                            || subMesh.material->alphaBlend) {
+                        sbtIndex = SBT_AlphaMasked;
+                    }
+                    pipeline.WriteHandle(hitGroups.GetMapped(), geometryIndex, sbtIndex);
                 }
 
                 // Build
@@ -382,24 +450,6 @@ namespace axiom
             cmd.BuildAccelerationStructure(builder, tlas, scratch);
             context.GetQueue(nova::QueueFlags::Graphics, 0).Submit({cmd}, {}, {fence});
             fence.Wait();
-        }
-
-        closestHitShader = nova::Shader::Create(context, nova::ShaderStage::ClosestHit, "main",
-            nova::glsl::Compile(nova::ShaderStage::ClosestHit, "src/renderers/pathtracer/axiom_ClosestHit.glsl", {}));
-
-        rayGenShader = nova::Shader::Create(context, nova::ShaderStage::RayGen, "main",
-            nova::glsl::Compile(nova::ShaderStage::RayGen, "src/renderers/pathtracer/axiom_RayGen.glsl", {}));
-
-        pipeline = nova::RayTracingPipeline::Create(context);
-        pipeline.Update(rayGenShader, {}, { { closestHitShader } }, {});
-
-        hitGroups = nova::Buffer::Create(context,
-            pipeline.GetTableSize(geometryCount),
-            nova::BufferUsage::ShaderBindingTable,
-            nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
-
-        for (u32 i = 0; i < geometryCount; ++i) {
-            pipeline.WriteHandle(hitGroups.GetMapped(), i, 0);
         }
     }
 

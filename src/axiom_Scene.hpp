@@ -142,18 +142,9 @@ namespace axiom
         u32 texCoords;
     };
 
-    enum class TextureFormat
-    {
-        RGBA8_Srgb,
-        RGBA8_Unorm,
-
-        RG_Unorm,
-    };
-
     struct TextureMap : nova::RefCounted
     {
         Vec2U           size;
-        TextureFormat format;
         std::vector<b8> data;
     };
 
@@ -165,17 +156,19 @@ namespace axiom
         nova::Ref<TextureMap>        transmission;
         nova::Ref<TextureMap> metalness_roughness;
 
-        f32 alphaCutoff = -1.f;
+        f32 alphaCutoff = 0.5f;
+        bool  alphaMask = false;
+        bool alphaBlend = false;
         bool       thin = false;
         bool subsurface = false;
     };
 
     struct SubMesh
     {
-        u32               vertexOffset;
-        u32                  maxVertex;
-        u32                 firstIndex;
-        u32                 indexCount;
+        u32             vertexOffset;
+        u32                maxVertex;
+        u32               firstIndex;
+        u32               indexCount;
         nova::Ref<Material> material;
     };
 
@@ -191,7 +184,7 @@ namespace axiom
     struct MeshInstance : nova::RefCounted
     {
         nova::Ref<Mesh> mesh;
-        nova::Mat4    transform;
+        nova::Mat4 transform;
     };
 
     struct Scene

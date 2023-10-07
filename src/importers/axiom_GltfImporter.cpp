@@ -17,7 +17,7 @@ namespace axiom
 
         GltfImporter(Scene& scene);
 
-        virtual void Import(std::filesystem::path gltf, std::optional<std::string_view> scene = {});
+        virtual void Import(std::filesystem::path gltf, bool fixNormals, std::optional<std::string_view> scene = {});
     };
 
     nova::Ref<Importer> CreateGltfImporter(Scene& scene)
@@ -32,6 +32,8 @@ namespace axiom
     struct GltfImporterImpl
     {
         GltfImporter& importer;
+
+        bool fixNormals = false;
 
         std::filesystem::path          baseDir;
         std::unique_ptr<fastgltf::Asset> asset;
@@ -75,7 +77,7 @@ namespace axiom
         void ProcessNode(const fastgltf::Node& node, Mat4 parentTransform);
     };
 
-    void GltfImporter::Import(std::filesystem::path gltf, std::optional<std::string_view> sceneName)
+    void GltfImporter::Import(std::filesystem::path gltf, bool fixNormals, std::optional<std::string_view> sceneName)
     {
         fastgltf::Parser parser {
               fastgltf::Extensions::KHR_texture_transform
@@ -118,6 +120,8 @@ namespace axiom
         }
 
         GltfImporterImpl impl{ *this };
+
+        impl.fixNormals = fixNormals;
 
         impl.baseDir = std::move(baseDir);
         impl.asset = std::make_unique<fastgltf::Asset>(std::move(res.get()));
@@ -225,6 +229,8 @@ namespace axiom
 
             shadingAttribs.resize(positions.count);
 
+            bool missingNormalsOrTangents = false;
+
             // Normals
             if (auto normals = prim->findAttribute("NORMAL"); normals != prim->attributes.end()) {
                 auto& accessor = asset->accessors[normals->second];
@@ -232,6 +238,8 @@ namespace axiom
                     accessor, [&](Vec3 normal, usz index) {
                         shadingAttribs[index].normal = normal;
                     });
+            } else {
+                missingNormalsOrTangents = true;
             }
 
             // Tangents
@@ -240,6 +248,8 @@ namespace axiom
                     asset->accessors[tangents->second], [&](Vec4 tangent, usz index) {
                         shadingAttribs[index].tangent = tangent;
                     });
+            } else {
+                missingNormalsOrTangents = true;
             }
 
             // TexCoords (1)
@@ -252,9 +262,7 @@ namespace axiom
                     });
             }
 
-            constexpr bool ReconstructNormals = false;
-
-            if (ReconstructNormals)
+            if (missingNormalsOrTangents || fixNormals)
             {
                 summedAreas.resize(shadingAttribs.size());
 
@@ -427,7 +435,8 @@ namespace axiom
             }, gltfImage.data);
 
             if (imageData) {
-                constexpr u32 MaxSize = 1024;
+                // constexpr u32 MaxSize = 1024;
+                constexpr u32 MaxSize = 4096;
 
                 if (width > MaxSize || height > MaxSize) {
                     u32 uWidth = u32(width);
@@ -526,16 +535,26 @@ namespace axiom
             return image;
         };
 
+        // Material Texture maps
+
         auto& pbr = material.pbrData;
-
         outMaterial->baseColor_alpha = getImage(pbr.baseColorTexture, pbr.baseColorFactor);
-        outMaterial->metalness_roughness = getImage(pbr.metallicRoughnessTexture, { pbr.metallicFactor, pbr.roughnessFactor });
-
         outMaterial->normals = getImage(material.normalTexture, { 0.5f, 0.5f, 1.f });
         outMaterial->emissivity = getImage(material.emissiveTexture, material.emissiveFactor);
-
         if (material.transmission) {
             outMaterial->transmission = getImage(material.transmission->transmissionTexture, { material.transmission->transmissionFactor });
+        } else {
+            outMaterial->transmission = getImage(std::nullopt, { 0.f });
+        }
+        outMaterial->metalness_roughness = getImage(pbr.metallicRoughnessTexture, { pbr.metallicFactor, pbr.roughnessFactor });
+
+        // Material Attribute
+
+        outMaterial->alphaCutoff = material.alphaCutoff;
+        switch (material.alphaMode) {
+            using enum fastgltf::AlphaMode;
+            break;case Blend: outMaterial->alphaBlend = true;
+            break;case  Mask: outMaterial->alphaMask  = true;
         }
     }
 

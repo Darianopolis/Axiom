@@ -18,27 +18,48 @@ using namespace nova::types;
 constexpr std::string_view UsageString =
     "Usage: [options] \"path/to/scene.gltf\" \"scene name\"\n"
     "options:\n"
-    "  --path-trace : Path tracing renderer\n"
-    "  --raster     : Raster renderer";
+    "  --path-trace  : Path tracing renderer\n"
+    "  --fix-normals : Reconstruct normals\n"
+    "  --raster      : Raster renderer";
 
 int main(int argc, char* argv[])
 {
-    if (argc < 3) {
-        std::cout << UsageString;
+    bool pathTrace = false;
+    bool raster = false;
+    bool fixNormals = false;
+    std::filesystem::path path{};
+
+    for (i32 i = 1; i < argc; ++i) {
+        std::string_view arg = argv[i];
+
+        if (arg == "--path-trace") {
+            pathTrace = true;
+        } else if (arg == "--raster") {
+            raster = true;
+        } else if (arg == "--fix-normals") {
+            fixNormals = true;
+        } else {
+            try {
+                path = arg;
+            } catch (...) {
+                NOVA_LOG("Argument: [{}] not a valid option", arg);
+                return 1;
+            }
+            if (!std::filesystem::exists(path)) {
+                NOVA_LOG("Argument: [{}] not a valid option or file does not exist", arg);
+                return 1;
+            }
+        }
+    }
+
+    if (path.empty()) {
+        NOVA_LOG("No file path provided");
         return 1;
     }
 
-    auto type = std::string_view(argv[1]);
-    if (type != "--path-trace" && type != "--raster") {
-        std::cout << UsageString;
-        std::cout << "\nUnknown option [" << type << "]";
-        return 1;
-    }
-
-    std::filesystem::path path{ argv[2] };
-    if (!std::filesystem::exists(path)) {
-        NOVA_LOG("File not found: {}", path.string());
-        return -1;
+    if (!(pathTrace | raster)) {
+        NOVA_LOG("No render mode selected, defaulting to path tracing");
+        pathTrace = true;
     }
 
 // -----------------------------------------------------------------------------
@@ -49,7 +70,7 @@ int main(int argc, char* argv[])
     axiom::Scene scene;
 
     auto importer = axiom::CreateGltfImporter(scene);
-    importer->Import(path);
+    importer->Import(path, fixNormals);
 
 // -----------------------------------------------------------------------------
     NOVA_TIMEIT("load-scene");
@@ -85,9 +106,9 @@ int main(int argc, char* argv[])
 // -----------------------------------------------------------------------------
 
     nova::Ref<axiom::Renderer> renderer;
-    if (type == "--path-trace") {
+    if (pathTrace) {
         renderer = axiom::CreatePathTraceRenderer(context, heap, &heapSlots);
-    } else if (type == "--raster") {
+    } else if (raster) {
         renderer = axiom::CreateRasterRenderer(context, heap, &heapSlots);
     }
     renderer->CompileScene(scene, cmdPool, fence);

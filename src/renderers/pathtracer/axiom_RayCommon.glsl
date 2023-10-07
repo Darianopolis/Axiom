@@ -5,6 +5,7 @@
 #extension GL_EXT_ray_tracing_position_fetch             : require
 #extension GL_NV_shader_invocation_reorder               : require
 #extension GL_EXT_shader_image_load_formatted            : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int8  : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 
 layout(set = 0, binding = 0) uniform image2D RWImage2D[];
@@ -15,9 +16,6 @@ layout(set = 0, binding = 0) uniform sampler Sampler[];
 struct RayPayload {
     vec3 position[3];
 };
-layout(location = 0) rayPayloadEXT RayPayload rayPayload;
-
-layout(location = 0) hitObjectAttributeNV vec3 bary;
 
 layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer ShadingAttrib {
     uint  tgtSpace;
@@ -29,7 +27,17 @@ layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer Ind
 };
 
 layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer Material {
-    uint baseColor_alpha;
+    uint     baseColor_alpha;
+    uint             normals;
+    uint          emissivity;
+    uint        transmission;
+    uint metalness_roughness;
+
+    float  alphaCutoff;
+    uint8_t  alphaMask;
+    uint8_t alphaBlend;
+    uint8_t       thin;
+    uint8_t subsurface;
 };
 
 layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer InstanceData {
@@ -114,4 +122,34 @@ vec3 DecodeTangent(vec3 normal, uint tgtSpace)
 {
     float tgtAngle = float(bitfieldExtract(tgtSpace, 21, 10)) / 1023.0;
     return DecodeTangent_(normal, tgtAngle);
+}
+
+// sRGB linear -> compressed
+vec3 Apply_sRGB_OETF(vec3 linear)
+{
+    bvec3 cutoff = lessThan(linear, vec3(0.0031308));
+    vec3 higher = vec3(1.055) * pow(linear, vec3(1.0 / 2.4)) - vec3(0.055);
+    vec3 lower = linear * vec3(12.92);
+
+    return mix(higher, lower, cutoff);
+}
+
+// sRGB compressed -> linear
+vec3 Apply_sRGB_EOTF(vec3 compressed)
+{
+    bvec3 cutoff = lessThan(compressed, vec3(0.04045));
+    vec3 higher = pow((compressed + vec3(0.055)) / vec3(1.055), vec3(2.4));
+    vec3 lower = compressed / vec3(12.92);
+
+    return mix(higher, lower, cutoff);
+}
+
+vec3 DebugSNorm(vec3 snorm)
+{
+    return snorm * 0.5 + 0.5;
+}
+
+vec3 DecodeNormalMap(vec3 mapped)
+{
+    return clamp(((mapped * 255) - 127) / 127, -1, 1);
 }

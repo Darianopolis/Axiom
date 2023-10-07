@@ -8,7 +8,7 @@ namespace axiom
     {
         virtual ~Importer() = 0;
 
-        virtual void Import(std::filesystem::path gltf, std::optional<std::string_view> scene = {}) = 0;
+        virtual void Import(std::filesystem::path gltf, bool fixNormals, std::optional<std::string_view> scene = {}) = 0;
     };
 
     inline

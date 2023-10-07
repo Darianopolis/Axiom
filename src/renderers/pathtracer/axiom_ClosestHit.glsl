@@ -1,10 +1,8 @@
 #version 460
-#extension GL_EXT_ray_tracing                : require
-#extension GL_EXT_ray_tracing_position_fetch : require
+#extension GL_GOOGLE_include_directive : require
 
-struct RayPayload {
-    vec3 position[3];
-};
+#include "axiom_RayCommon.glsl"
+
 layout(location = 0) rayPayloadInEXT RayPayload rayPayload;
 
 void main()

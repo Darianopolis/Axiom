@@ -3,6 +3,10 @@
 
 #include "axiom_RayCommon.glsl"
 
+layout(location = 0) rayPayloadEXT RayPayload rayPayload;
+
+layout(location = 0) hitObjectAttributeNV vec3 bary;
+
 void main()
 {
     vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy);
@@ -89,15 +93,20 @@ void main()
         vec3 nrm0 = SignedOctDecode(sa0.tgtSpace);
         vec3 nrm1 = SignedOctDecode(sa1.tgtSpace);
         vec3 nrm2 = SignedOctDecode(sa2.tgtSpace);
-        vec3 nrm = nrm0 * w.x + nrm1 * w.y + nrm2 * w.z;
-        nrm = normalize(tgtSpaceToWorld * nrm);
+        vec3 vertNrm = nrm0 * w.x + nrm1 * w.y + nrm2 * w.z;
+        vertNrm = normalize(tgtSpaceToWorld * vertNrm);
 
         // Tangents
         vec3 tgt0 = DecodeTangent(nrm0, sa0.tgtSpace);
         vec3 tgt1 = DecodeTangent(nrm1, sa1.tgtSpace);
         vec3 tgt2 = DecodeTangent(nrm2, sa2.tgtSpace);
-        vec3 tgt = tgt0 * w.x + tgt1 * w.y + tgt2 * w.z;
-        tgt = normalize(tgtSpaceToWorld * tgt);
+        vec3 tangent = tgt0 * w.x + tgt1 * w.y + tgt2 * w.z;
+        tangent = normalize(tgtSpaceToWorld * tangent);
+
+        // Tangent space
+        tangent = normalize(tangent - dot(tangent, vertNrm) * vertNrm);
+        vec3 bitangent = normalize(cross(tangent, vertNrm));
+        mat3 TBN = mat3(tangent, bitangent, vertNrm);
 
         // Tex Coords
         vec2 uv0 = unpackHalf2x16(sa0.texCoords);
@@ -124,17 +133,24 @@ void main()
 
         // Side corrected normals
         if (hitKind != gl_HitKindFrontFacingTriangleEXT) {
-            nrm = -nrm;
+            vertNrm = -vertNrm;
             flatNrm = -flatNrm;
         }
 
         // Texture
-        vec4 baseColor_alpha = texture(sampler2D(Image2D[geometry.material.baseColor_alpha], Sampler[pc.linearSampler]), uv);
+        vec4 baseColor_alpha = texture(sampler2D(Image2D[nonuniformEXT(geometry.material.baseColor_alpha)], Sampler[pc.linearSampler]), uv);
+        baseColor_alpha.rgb = Apply_sRGB_EOTF(baseColor_alpha.rgb);
+
+        // Normal mapping
+        vec3 nrm = texture(sampler2D(Image2D[nonuniformEXT(geometry.material.normals)], Sampler[pc.linearSampler]), uv).xyz;
+        nrm = DecodeNormalMap(nrm);
+        nrm = normalize(TBN * nrm);
 
 // -----------------------------------------------------------------------------
 // #define DEBUG_UV
 // #define DEBUG_FLAT_NRM
-// #define DEBUG_NRM
+// #define DEBUG_VERT_NRM
+#define DEBUG_NRM
 // #define DEBUG_TGT
 // #define DEBUG_BARY
 // -----------------------------------------------------------------------------
@@ -142,16 +158,22 @@ void main()
 #if   defined(DEBUG_UV)
         color = vec3(uv, 0);
 #elif defined(DEBUG_FLAT_NRM)
-        color = (flatNrm * 0.5 + 0.5) * 0.75;
+        color = DebugSNorm(flatNrm);
+#elif defined(DEBUG_VERT_NRM)
+        color = DebugSNorm(vertNrm);
 #elif defined(DEBUG_NRM)
-        color = (nrm * 0.5 + 0.5) * 0.75;
+        color = DebugSNorm(nrm);
 #elif defined(DEBUG_TGT)
-        color = (tgt * 0.5 + 0.5) * 0.75;
+        color = DebugSNorm(tgt);
 #elif defined(DEBUG_BARY)
         color = vec3(1.0 - bary.x - bary.y, bary.x, bary.y);
 #else
         color = baseColor_alpha.rgb;
+
+        // sRGB EOTF correction
+        color = Apply_sRGB_OETF(color);
 #endif
     }
+
     imageStore(RWImage2D[pc.target], ivec2(gl_LaunchIDEXT.xy), vec4(color, 1));
 }
