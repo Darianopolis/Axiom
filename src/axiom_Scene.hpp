@@ -156,11 +156,11 @@ namespace axiom
         nova::Ref<TextureMap>        transmission;
         nova::Ref<TextureMap> metalness_roughness;
 
-        f32 alphaCutoff = 0.5f;
-        bool  alphaMask = false;
-        bool alphaBlend = false;
-        bool       thin = false;
-        bool subsurface = false;
+        f32  alphaCutoff = 0.5f;
+        bool   alphaMask = false;
+        bool  alphaBlend = false;
+        bool        thin = false;
+        bool  subsurface = false;
     };
 
     struct SubMesh

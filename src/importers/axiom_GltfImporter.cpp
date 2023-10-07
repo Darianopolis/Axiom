@@ -546,7 +546,7 @@ namespace axiom
         } else {
             outMaterial->transmission = getImage(std::nullopt, { 0.f });
         }
-        outMaterial->metalness_roughness = getImage(pbr.metallicRoughnessTexture, { pbr.metallicFactor, pbr.roughnessFactor });
+        outMaterial->metalness_roughness = getImage(pbr.metallicRoughnessTexture, { 0.f, pbr.roughnessFactor, pbr.metallicFactor });
 
         // Material Attribute
 

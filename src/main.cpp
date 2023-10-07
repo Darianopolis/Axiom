@@ -27,7 +27,7 @@ int main(int argc, char* argv[])
     bool pathTrace = false;
     bool raster = false;
     bool fixNormals = false;
-    std::filesystem::path path{};
+    std::vector<std::filesystem::path> paths;
 
     for (i32 i = 1; i < argc; ++i) {
         std::string_view arg = argv[i];
@@ -40,19 +40,20 @@ int main(int argc, char* argv[])
             fixNormals = true;
         } else {
             try {
-                path = arg;
+                auto path = std::filesystem::path(arg);
+                if (!std::filesystem::exists(path)) {
+                    NOVA_LOG("Argument: [{}] not a valid option or file does not exist", arg);
+                    return 1;
+                }
+                paths.emplace_back(std::move(path));
             } catch (...) {
                 NOVA_LOG("Argument: [{}] not a valid option", arg);
-                return 1;
-            }
-            if (!std::filesystem::exists(path)) {
-                NOVA_LOG("Argument: [{}] not a valid option or file does not exist", arg);
                 return 1;
             }
         }
     }
 
-    if (path.empty()) {
+    if (paths.empty()) {
         NOVA_LOG("No file path provided");
         return 1;
     }
@@ -63,14 +64,19 @@ int main(int argc, char* argv[])
     }
 
 // -----------------------------------------------------------------------------
-    NOVA_LOG("Loading scene: {}", path.string());
+    NOVA_LOG("Loading models:");
+    for (auto& path : paths) {
+        NOVA_LOG(" - {}", path.string());
+    }
     NOVA_TIMEIT_RESET();
 // -----------------------------------------------------------------------------
 
     axiom::Scene scene;
 
     auto importer = axiom::CreateGltfImporter(scene);
-    importer->Import(path, fixNormals);
+    for (auto& path : paths) {
+        importer->Import(path, fixNormals);
+    }
 
 // -----------------------------------------------------------------------------
     NOVA_TIMEIT("load-scene");
@@ -121,9 +127,8 @@ int main(int argc, char* argv[])
     glfwInit();
     NOVA_CLEANUP(&) { glfwTerminate(); };
 
-    auto title = std::format("Axiom - {}", path.string());
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    auto window = glfwCreateWindow(1920, 1080, title.c_str(), nullptr, nullptr);
+    auto window = glfwCreateWindow(1920, 1080, "Axiom", nullptr, nullptr);
 
     auto swapchain = nova::Swapchain::Create(context,
         glfwGetWin32Window(window),

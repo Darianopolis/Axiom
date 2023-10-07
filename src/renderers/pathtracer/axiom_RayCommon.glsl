@@ -153,3 +153,43 @@ vec3 DecodeNormalMap(vec3 mapped)
 {
     return clamp(((mapped * 255) - 127) / 127, -1, 1);
 }
+
+float sqr(float x) { return x*x; }
+
+float sdot(vec3 x, vec3 y, float f)
+{
+    return clamp(dot(x, y) * f, 0, 1);
+}
+
+bool IsNanOrInf(vec3 v)
+{
+    float t = v.x + v.y + v.z;
+    return isnan(t) || isinf(t);
+}
+
+vec3 OffsetPointByNormal(vec3 p, vec3 n)
+{
+    p = p + 0.0001 * n;
+    const float Origin = 1.0 / 32.0;
+    const float FloatScale = 1.0 / 65536.0;
+    const float IntScale = 256.0;
+
+    ivec3 offsetInt = ivec3(IntScale * n.x, IntScale * n.y, IntScale * n.z);
+
+    vec3 positionInt = vec3(
+        intBitsToFloat(floatBitsToInt(p.x) + ((p.x < 0) ? -offsetInt.x : offsetInt.x)),
+        intBitsToFloat(floatBitsToInt(p.y) + ((p.y < 0) ? -offsetInt.y : offsetInt.y)),
+        intBitsToFloat(floatBitsToInt(p.z) + ((p.z < 0) ? -offsetInt.z : offsetInt.z)));
+
+    return vec3(
+        abs(p.x) < Origin ? p.x + FloatScale * n.x : positionInt.x,
+        abs(p.y) < Origin ? p.y + FloatScale * n.y : positionInt.y,
+        abs(p.z) < Origin ? p.z + FloatScale * n.z : positionInt.z);
+}
+
+float LuminanceRGB(vec3 rgb)
+{
+    // https://stackoverflow.com/questions/596216/formula-to-determine-perceived-brightness-of-rgb-color
+    // return 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
+    return 0.3 * rgb.r + 0.6 * rgb.g + 0.1 * rgb.b;
+}
