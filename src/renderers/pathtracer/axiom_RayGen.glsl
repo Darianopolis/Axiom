@@ -31,7 +31,7 @@ bool IsUnobstructed(vec3 origin, vec3 dir, float tMax)
 void main()
 {
     vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy);
-    pixelCenter += vec2(0.5);
+    pixelCenter += pc.jitter;
     vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
     vec2 d = inUV * 2.0 - 1.0;
     vec3 focalPoint = pc.camZOffset * cross(pc.camX, pc.camY);
@@ -66,8 +66,8 @@ void main()
     vec3 throughput = vec3(1.0);
     uint maxDepth   = 1;
 
-    // const vec3  SunDir       = normalize(vec3(2, 4, 1));
-    const vec3  SunDir       = normalize(vec3(-1, 1, -1));
+    const vec3  SunDir       = normalize(vec3(2, 4, 1));
+    // const vec3  SunDir       = normalize(vec3(-1, 1, -1));
     const float SunIntensity = 22.0;
 
     for (uint i = 0; i < maxDepth; ++i) {
@@ -210,7 +210,7 @@ void main()
 // #define DEBUG_TGT
 // #define DEBUG_BARY
 // #define DEBUG_BASE
-#define DEBUG_MRAO
+// #define DEBUG_MRAO
 // #define DEBUG_EMIS
 // -----------------------------------------------------------------------------
 #if   defined(DEBUG_UV)
@@ -248,7 +248,7 @@ void main()
             color += throughput * emissivity;
 
             // Ambient term
-            color += throughput * baseColor * 0.3;
+            color += throughput * baseColor * 0.1;
 
             // BRDF
             if (IsUnobstructed(OffsetPointByNormal(pos, flatNrm), SunDir, 8000000.0)) {
@@ -258,8 +258,16 @@ void main()
         }
     }
 
-    // sRGB EOTF correction
-    color = Apply_sRGB_OETF(color);
+    vec4 prev = imageLoad(RWImage2D[pc.target], ivec2(gl_LaunchIDEXT.xy));
+    vec4 new = vec4(color, 1);
 
-    imageStore(RWImage2D[pc.target], ivec2(gl_LaunchIDEXT.xy), vec4(color, 1));
+    float oldWeight = float(pc.sampleCount) / float(pc.sampleCount + 1);
+    float newWeight = 1 - oldWeight;
+
+    // Check for oldWeight = 0 to avoid inf/nan propagating over reset
+    vec4 updated = (oldWeight == 0)
+        ? new
+        : (prev * oldWeight) + (new * newWeight);
+
+    imageStore(RWImage2D[pc.target], ivec2(gl_LaunchIDEXT.xy), updated);
 }

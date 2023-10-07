@@ -161,6 +161,7 @@ namespace axiom
         bool  alphaBlend = false;
         bool        thin = false;
         bool  subsurface = false;
+        bool       decal = false;
     };
 
     struct SubMesh

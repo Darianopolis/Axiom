@@ -61,6 +61,10 @@ namespace axiom
         nova::Sampler             linearSampler;
         nova::DescriptorHandle linearSamplerIdx;
 
+        nova::Texture             accumulationTarget;
+        nova::DescriptorHandle accumulationTargetIdx;
+        u32                              sampleCount;
+
         nova::Buffer                        materialBuffer;
         nova::HashMap<void*, u64>        materialAddresses;
         nova::HashMap<void*, LoadedTexture> loadedTextures;
@@ -78,6 +82,11 @@ namespace axiom
         nova::Shader         anyHitShader;
         nova::Shader     closestHitShader;
         nova::Shader         rayGenShader;
+
+        nova::Shader    postProcessShader;
+
+        std::mt19937 rng;
+        std::uniform_real_distribution<f32> dist{ 0.f, 1.f };
 
         Vec3 viewPos;
         Quat viewRot;
@@ -103,6 +112,8 @@ namespace axiom
 
         renderer->linearSampler = nova::Sampler::Create(context, nova::Filter::Linear, nova::AddressMode::Repeat, nova::BorderColor::TransparentBlack, 16.f);
         renderer->linearSamplerIdx = heapSlots->Acquire();
+
+        renderer->accumulationTargetIdx = heapSlots->Acquire();
 
         return renderer;
     }
@@ -136,6 +147,8 @@ namespace axiom
         closestHitShader.Destroy();
         rayGenShader.Destroy();
         pipeline.Destroy();
+
+        accumulationTarget.Destroy();
     }
 
     void PathTraceRenderer::CompileMaterials(nova::CommandPool cmdPool, nova::Fence fence)
@@ -198,6 +211,9 @@ namespace axiom
         scene = &_scene;
 
         // Shaders
+
+        postProcessShader = nova::Shader::Create(context, nova::ShaderStage::Compute, "main",
+            nova::glsl::Compile(nova::ShaderStage::Compute, "src/renderers/pathtracer/axiom_PostProcess.glsl", {}));
 
         anyHitShader = nova::Shader::Create(context, nova::ShaderStage::AnyHit, "main",
             nova::glsl::Compile(nova::ShaderStage::AnyHit, "src/renderers/pathtracer/axiom_AnyHit.glsl", {}));
@@ -457,22 +473,44 @@ namespace axiom
     {
         (void)aspect;
 
-        viewPos = position;
-        viewRot = rotation;
-        viewFov = fov;
+        if (viewPos != position || viewRot != rotation || viewFov != fov) {
+            viewPos = position;
+            viewRot = rotation;
+            viewFov = fov;
+
+            sampleCount = 0;
+        }
     }
 
     void PathTraceRenderer::Record(nova::CommandList cmd, nova::Texture target, u32 targetIdx)
     {
         auto size = target.GetExtent();
 
-        struct PushConstants
+        // Resize backing buffers
+
+        if (!accumulationTarget || accumulationTarget.GetExtent() != size) {
+            accumulationTarget.Destroy();
+
+            accumulationTarget = nova::Texture::Create(context, Vec3U(Vec2U(size), 0),
+                nova::TextureUsage::Storage,
+                nova::Format::RGBA16_SFloat,
+                {});
+
+            accumulationTarget.Transition(nova::TextureLayout::GeneralImage);
+            heap.WriteStorageTexture(accumulationTargetIdx, accumulationTarget);
+
+            sampleCount = 0;
+        }
+
+        // Trace rays
+
+        struct PC_RayTrace
         {
             u64       tlas;
             u64 geometries;
             u64  instances;
 
-            u32 target;
+            nova::DescriptorHandle target;
 
             Vec3       pos;
             Vec3      camX;
@@ -480,20 +518,52 @@ namespace axiom
             f32 camZOffset;
 
             nova::DescriptorHandle linearSampler;
+
+            u32 sampleCount;
+
+            Vec2 jitter;
         };
 
-        cmd.PushConstants(PushConstants {
+        // Apply pixel jitter for all non-initial
+        auto jitter = sampleCount == 0
+            ? Vec2(0.5f)
+            : Vec2(dist(rng), dist(rng));
+
+        cmd.PushConstants(PC_RayTrace {
             .tlas = tlas.GetAddress(),
             .geometries = geometryInfoBuffer.GetAddress(),
             .instances = instanceDataBuffer.GetAddress(),
-            .target = targetIdx,
+            .target = accumulationTargetIdx,
             .pos = viewPos,
             .camX = viewRot * Vec3(1.f, 0.f, 0.f),
             .camY = viewRot * Vec3(0.f, 1.f, 0.f),
             .camZOffset = 1.f / glm::tan(0.5f * viewFov),
             .linearSampler = linearSamplerIdx,
+            .sampleCount = sampleCount,
+            .jitter = jitter,
         });
 
+        sampleCount++;
+
         cmd.TraceRays(pipeline, target.GetExtent(), hitGroups.GetAddress(), 1);
+
+        // Post process
+
+        struct PC_PostProcess
+        {
+            Vec2U                    size;
+            nova::DescriptorHandle source;
+            nova::DescriptorHandle target;
+        };
+
+        cmd.PushConstants(PC_PostProcess {
+            .size = Vec2U(target.GetExtent()),
+            .source = accumulationTargetIdx,
+            .target = targetIdx
+        });
+
+        cmd.BindShaders({ postProcessShader });
+        cmd.Barrier(nova::PipelineStage::RayTracing, nova::PipelineStage::Compute);
+        cmd.Dispatch(Vec3U((Vec2U(size) + Vec2U(15)) / Vec2U(16), 1));
     }
 }

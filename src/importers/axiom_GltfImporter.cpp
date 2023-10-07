@@ -184,6 +184,10 @@ namespace axiom
             if (positions == prim.attributes.end())
                 continue;
 
+            // TODO: Skip decals for now, need to implement decal masking
+            if (prim.materialIndex && materials[prim.materialIndex.value()]->decal)
+                continue;
+
             vertexCount += asset->accessors[positions->second].count;
             indexCount  += asset->accessors[prim.indicesAccessor.value()].count;
 
@@ -555,6 +559,11 @@ namespace axiom
             using enum fastgltf::AlphaMode;
             break;case Blend: outMaterial->alphaBlend = true;
             break;case  Mask: outMaterial->alphaMask  = true;
+        }
+
+        // TODO: Sponza temporary hack DELETEME
+        if (material.name == "dirt_decal") {
+            outMaterial->decal = true;
         }
     }
 
