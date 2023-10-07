@@ -153,64 +153,10 @@ namespace axiom
         }
 
         vertexShader = nova::Shader::Create(context, nova::ShaderStage::Vertex, "main",
-            nova::glsl::Compile( nova::ShaderStage::Vertex, "", {R"glsl(
-                #version 460
-                #extension GL_EXT_scalar_block_layout  : require
-                #extension GL_EXT_buffer_reference2    : require
-                #extension GL_EXT_nonuniform_qualifier : require
-
-                layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer PosAttrib {
-                    vec3 position;
-                };
-
-                layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer ShadingAttrib {
-                    uint tangentSpace_matIndex;
-                    uint texCoord;
-                };
-
-                layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer Instance {
-                    mat4 transform;
-                };
-
-                layout(push_constant, scalar) readonly uniform pc_ {
-                    PosAttrib         posAttribs;
-                    ShadingAttrib shadingAttribs;
-                    Instance           instances;
-                    mat4                viewProj;
-                } pc;
-
-                layout(location = 0) out vec3 outPosition;
-
-                void main()
-                {
-                    PosAttrib p = pc.posAttribs[gl_VertexIndex];
-                    Instance instance = pc.instances[gl_InstanceIndex];
-
-                    vec4 worldPos = instance.transform * vec4(p.position, 1);
-                    outPosition = vec3(worldPos);
-                    gl_Position = pc.viewProj * worldPos;
-                }
-            )glsl"}));
+            nova::glsl::Compile( nova::ShaderStage::Vertex, "src/renderers/rasterizer/axiom_Vertex.glsl", {}));
 
         fragmentShader = nova::Shader::Create(context, nova::ShaderStage::Fragment, "main",
-            nova::glsl::Compile(nova::ShaderStage::Fragment, "", {R"glsl(
-                #version 460
-                #extension GL_EXT_fragment_shader_barycentric : require
-
-                layout(location = 0) in pervertexEXT vec3 inPosition[3];
-                layout(location = 0) out vec4 outColor;
-
-                void main()
-                {
-                    vec3 v01 = inPosition[1] - inPosition[0];
-                    vec3 v02 = inPosition[2] - inPosition[0];
-                    vec3 nrm = normalize(cross(v01, v02));
-                    if (!gl_FrontFacing) {
-                        nrm = -nrm;
-                    }
-                    outColor = vec4((nrm * 0.5 + 0.5) * 0.75, 1.0);
-                }
-            )glsl"}));
+            nova::glsl::Compile(nova::ShaderStage::Fragment, "src/renderers/rasterizer/axiom_Fragment.glsl", {}));
     }
 
     void RasterRenderer::SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov)
