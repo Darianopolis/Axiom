@@ -156,7 +156,8 @@ void main()
 
             // Tangent space
             tangent = normalize(tangent - dot(tangent, vertNrm) * vertNrm);
-            vec3 bitangent = normalize(cross(tangent, vertNrm));
+            float tgtSpaceSign = float(bitfieldExtract(sa0.tgtSpace, 31, 1)) * 2.0 - 1.0;
+            vec3 bitangent = normalize(cross(tangent, vertNrm) * tgtSpaceSign);
             mat3 TBN = mat3(tangent, bitangent, vertNrm);
 
             // Tex Coords
@@ -201,7 +202,7 @@ void main()
             nrm = normalize(TBN * nrm);
 
 // -----------------------------------------------------------------------------
-//                          Debug writeout = Begin
+//                          Debug writeout - Begin
 // -----------------------------------------------------------------------------
 // #define DEBUG_UV
 // #define DEBUG_FLAT_NRM
@@ -214,7 +215,7 @@ void main()
 // #define DEBUG_EMIS
 // -----------------------------------------------------------------------------
 #if   defined(DEBUG_UV)
-            color = vec3(uv, 0);
+            color = vec3(mod(uv, 1.0), 0);
 #elif defined(DEBUG_FLAT_NRM)
             color = DebugSNorm(flatNrm);
 #elif defined(DEBUG_VERT_NRM)
@@ -222,7 +223,7 @@ void main()
 #elif defined(DEBUG_NRM)
             color = DebugSNorm(nrm);
 #elif defined(DEBUG_TGT)
-            color = DebugSNorm(tgt);
+            color = DebugSNorm(tangent);
 #elif defined(DEBUG_BARY)
             color = vec3(1.0 - bary.x - bary.y, bary.x, bary.y);
 #elif defined(DEBUG_BASE)

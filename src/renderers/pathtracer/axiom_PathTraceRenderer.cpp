@@ -493,7 +493,7 @@ namespace axiom
 
             accumulationTarget = nova::Texture::Create(context, Vec3U(Vec2U(size), 0),
                 nova::TextureUsage::Storage,
-                nova::Format::RGBA16_SFloat,
+                nova::Format::RGBA32_SFloat,
                 {});
 
             accumulationTarget.Transition(nova::TextureLayout::GeneralImage);
@@ -524,7 +524,7 @@ namespace axiom
             Vec2 jitter;
         };
 
-        // Apply pixel jitter for all non-initial
+        // Apply pixel jitter for all non-initial samples
         auto jitter = sampleCount == 0
             ? Vec2(0.5f)
             : Vec2(dist(rng), dist(rng));

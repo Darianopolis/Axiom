@@ -19,14 +19,18 @@ constexpr std::string_view UsageString =
     "Usage: [options] \"path/to/scene.gltf\" \"scene name\"\n"
     "options:\n"
     "  --path-trace  : Path tracing renderer\n"
-    "  --fix-normals : Reconstruct normals\n"
+    "  --gen-tbn     : Reconstruct normals\n"
+    "  --flip-uvs    : Flip UVs vertically\n"
+    "  --flip-nmap-z : Flip normal map Z axis\n"
+    "  --assimp      : Use assimp importer (experimental)\n"
     "  --raster      : Raster renderer";
 
 int main(int argc, char* argv[])
 {
     bool pathTrace = false;
     bool raster = false;
-    bool fixNormals = false;
+    axiom::ImportSettings settings;
+    bool useAssimp = false;
     std::vector<std::filesystem::path> paths;
 
     for (i32 i = 1; i < argc; ++i) {
@@ -36,8 +40,14 @@ int main(int argc, char* argv[])
             pathTrace = true;
         } else if (arg == "--raster") {
             raster = true;
-        } else if (arg == "--fix-normals") {
-            fixNormals = true;
+        } else if (arg == "--gen-tbn") {
+            settings.genTBN = true;
+        } else if (arg == "--flip-uvs") {
+            settings.flipUVs = true;
+        } else if (arg == "--flip-nmap-z") {
+            settings.flipNormalMapZ = true;
+        } else if (arg == "--assimp") {
+            useAssimp = true;
         } else {
             try {
                 auto path = std::filesystem::path(arg);
@@ -73,9 +83,12 @@ int main(int argc, char* argv[])
 
     axiom::Scene scene;
 
-    auto importer = axiom::CreateGltfImporter(scene);
+    auto importer = useAssimp
+        ? axiom::CreateAssimpImporter(scene)
+        : axiom::CreateGltfImporter(scene);
+
     for (auto& path : paths) {
-        importer->Import(path, fixNormals);
+        importer->Import(path, settings);
     }
 
 // -----------------------------------------------------------------------------

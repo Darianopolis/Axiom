@@ -17,7 +17,7 @@ namespace axiom
 
         GltfImporter(Scene& scene);
 
-        virtual void Import(std::filesystem::path gltf, bool fixNormals, std::optional<std::string_view> scene = {});
+        virtual void Import(std::filesystem::path gltf, const ImportSettings& settings, std::optional<std::string_view> scene = {});
     };
 
     nova::Ref<Importer> CreateGltfImporter(Scene& scene)
@@ -33,7 +33,7 @@ namespace axiom
     {
         GltfImporter& importer;
 
-        bool fixNormals = false;
+        ImportSettings settings;
 
         std::filesystem::path          baseDir;
         std::unique_ptr<fastgltf::Asset> asset;
@@ -77,7 +77,7 @@ namespace axiom
         void ProcessNode(const fastgltf::Node& node, Mat4 parentTransform);
     };
 
-    void GltfImporter::Import(std::filesystem::path gltf, bool fixNormals, std::optional<std::string_view> sceneName)
+    void GltfImporter::Import(std::filesystem::path gltf, const ImportSettings& settings, std::optional<std::string_view> sceneName)
     {
         fastgltf::Parser parser {
               fastgltf::Extensions::KHR_texture_transform
@@ -121,7 +121,7 @@ namespace axiom
 
         GltfImporterImpl impl{ *this };
 
-        impl.fixNormals = fixNormals;
+        impl.settings = settings;
 
         impl.baseDir = std::move(baseDir);
         impl.asset = std::make_unique<fastgltf::Asset>(std::move(res.get()));
@@ -266,7 +266,7 @@ namespace axiom
                     });
             }
 
-            if (missingNormalsOrTangents || fixNormals)
+            if (missingNormalsOrTangents || settings.genTBN)
             {
                 summedAreas.resize(shadingAttribs.size());
 

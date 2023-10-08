@@ -146,6 +146,9 @@ namespace axiom
     {
         Vec2U           size;
         std::vector<b8> data;
+
+        f32 minAlpha = 1.f;
+        f32 maxAlpha = 0.f;
     };
 
     struct Material : nova::RefCounted
@@ -194,5 +197,24 @@ namespace axiom
         std::vector<nova::Ref<Material>>     materials;
         std::vector<nova::Ref<Mesh>>            meshes;
         std::vector<nova::Ref<MeshInstance>> instances;
+
+        inline
+        void DebugDump()
+        {
+            for (auto[meshIdx, mesh] : meshes | std::views::enumerate) {
+                NOVA_LOG("Mesh[{}]", meshIdx);
+                NOVA_LOGEXPR(mesh->indices.size());
+                NOVA_LOGEXPR(mesh->shadingAttribs.size());
+                NOVA_LOGEXPR(mesh->positionAttribs.size());
+                NOVA_LOGEXPR(mesh->subMeshes.size());
+                for (auto[subMeshIdx, subMesh] : mesh->subMeshes | std::views::enumerate) {
+                    NOVA_LOG("Submesh[{}]", subMeshIdx);
+                    NOVA_LOGEXPR(subMesh.vertexOffset);
+                    NOVA_LOGEXPR(subMesh.maxVertex);
+                    NOVA_LOGEXPR(subMesh.firstIndex);
+                    NOVA_LOGEXPR(subMesh.indexCount);
+                }
+            }
+        }
     };
 }
