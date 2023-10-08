@@ -50,6 +50,7 @@ layout(push_constant, scalar) uniform pc_ {
     uint64_t           tlas;
     GeometryInfo geometries;
     InstanceData  instances;
+    Index         noiseSeed;
     uint             target;
     vec3                pos;
     vec3               camX;

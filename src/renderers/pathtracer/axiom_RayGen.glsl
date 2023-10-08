@@ -28,8 +28,97 @@ bool IsUnobstructed(vec3 origin, vec3 dir, float tMax)
     return !hitObjectIsHitNV(hit);
 }
 
+uvec2 rnd;
+
+float RandomUNorm()
+{
+    const uint64_t A = 4294883355;
+    uint x = rnd.x, c = rnd.y;
+    uint res = x ^ c;
+    uint64_t next = x * A + c;
+    rnd.x = uint(next & 4294967295);
+    rnd.y = uint(next >> 32);
+
+    return 2.3283064365387e-10 * res;
+}
+
+vec3 ChangeBasis(vec3 v, vec3 N)
+{
+    float s = sign(N.z);
+    float a = -1.0 / (s + N.z);
+    float b = N.x * N.y * a;
+
+    vec3 T = vec3(1 + s * sqr(N.x) * a, s * b, -s * N.x);
+    vec3 B = vec3(b, s + sqr(N.y) * a, -N.y);
+
+    return normalize(
+          (v.x * T)
+        + (v.y * B)
+        + (v.z * N));
+}
+
+vec3 RandomOnCone(vec3 dir, float cosThetaMax)
+{
+    float u0 = RandomUNorm();
+    float cosTheta = (1 - u0) + u0 * cosThetaMax;
+    float sinTheta = sqrt(1 - cosTheta * cosTheta);
+    float phi = 2 * PI * RandomUNorm();
+
+    vec3 v1 = vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+    return ChangeBasis(v1, dir);
+}
+
+vec2 ConcentricSampleDisk()
+{
+    vec2 uOffset = 2 * vec2(RandomUNorm(), RandomUNorm()) - vec2(1, 1);
+
+    if (uOffset.x == 0 && uOffset.y == 0)
+        return vec2(0, 0);
+
+    float theta, r;
+    if (abs(uOffset.x) > abs(uOffset.y)) {
+        r = uOffset.x;
+        theta = PI/4 * (uOffset.y / uOffset.x);
+    } else {
+        r = uOffset.y;
+        theta = PI/2 - (PI/4 * uOffset.x / uOffset.y);
+    }
+
+    return r * vec2(cos(theta), sin(theta));
+}
+
+vec3 CosineSampleHemisphere()
+{
+    vec2 d = ConcentricSampleDisk();
+    float z = sqrt(max(0, 1 - d.x * d.x - d.y * d.y));
+    return vec3(d.x, d.y, z);
+}
+
+float CosineSampleHemispherePDF(float cosTheta)
+{
+    return cosTheta / PI;
+}
+
 void main()
 {
+    {
+        uint sx = uint(gl_LaunchIDEXT.x);
+        uint sy = gl_LaunchSizeEXT.x + 4 + uint(gl_LaunchIDEXT.y);
+        rnd.x = pc.noiseSeed[sx + 0].value ^ pc.noiseSeed[sy + 1].value;
+        rnd.y = pc.noiseSeed[sx + 3].value ^ pc.noiseSeed[sy + 2].value;
+    }
+
+    // if (true) {
+    //     vec3 color = vec3(
+    //         RandomUNorm(),
+    //         RandomUNorm(),
+    //         RandomUNorm());
+    //     imageStore(RWImage2D[pc.target], ivec2(gl_LaunchIDEXT.xy), vec4(color, 1));
+    //     return;
+    // }
+
+    // Pixel
+
     vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy);
     pixelCenter += pc.jitter;
     vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
@@ -64,11 +153,13 @@ void main()
 
     vec3 color      = vec3(0.0);
     vec3 throughput = vec3(1.0);
-    uint maxDepth   = 1;
+    uint maxDepth   = 10;
 
     const vec3  SunDir       = normalize(vec3(2, 4, 1));
     // const vec3  SunDir       = normalize(vec3(-1, 1, -1));
-    const float SunIntensity = 22.0;
+    const float SunIntensity = 200.0;
+    const float SkyIntensity = 50.0;
+    const float SunCosTheta  = cos(radians(0.54) * 0.5);
 
     for (uint i = 0; i < maxDepth; ++i) {
 
@@ -98,7 +189,7 @@ void main()
                 normalize(dir),                 // ray dir
                 vec3(0, 6372e3, 0),             // ray origin
                 SunDir,
-                SunIntensity,
+                SkyIntensity,
                 6371e3,                         // radius of the planet in meters
                 6471e3,                         // radius of the atmosphere in meters
                 vec3(5.5e-6, 13.0e-6, 22.4e-6), // Rayleigh scattering coefficient
@@ -195,6 +286,7 @@ void main()
 
             // Emissivity
             vec3 emissivity = texture(sampler2D(Image2D[nonuniformEXT(geometry.material.emissivity)], Sampler[pc.linearSampler]), uv).rgb;
+            emissivity *= 20;
 
             // Normal mapping
             vec3 nrm = texture(sampler2D(Image2D[nonuniformEXT(geometry.material.normals)], Sampler[pc.linearSampler]), uv).xyz;
@@ -248,13 +340,63 @@ void main()
             // Emissive term
             color += throughput * emissivity;
 
-            // Ambient term
-            color += throughput * baseColor * 0.1;
+            // {
+            //     // Ambient term
+            //     color += throughput * baseColor * 0.1;
 
-            // BRDF
-            if (IsUnobstructed(OffsetPointByNormal(pos, flatNrm), SunDir, 8000000.0)) {
-                color += throughput *
-                    CookTorranceBrdf(nrm, -dir, SunDir, baseColor, roughness, metalness, 1.5, true);
+            //     // BRDF
+
+            //     vec3 sampleDir = RandomOnCone(SunDir, SunCosTheta);
+            //     if (IsUnobstructed(OffsetPointByNormal(pos, flatNrm), sampleDir, 8000000.0)) {
+            //         color += throughput *
+            //             CookTorranceBrdf(nrm, -dir, SunDir, baseColor, roughness, metalness, 1.5, true);
+            //     }
+
+            //     break;
+            // }
+
+            if (roughness > 0.0) {
+                // BRDF
+
+                if (RandomUNorm() > 0.5)
+                {
+                    vec3 sampleDir = RandomOnCone(SunDir, SunCosTheta);
+                    if (IsUnobstructed(OffsetPointByNormal(pos, flatNrm), sampleDir, 8000000.0)) {
+                        color += throughput *
+                            CookTorranceBrdf(nrm, -dir, sampleDir, baseColor, roughness, metalness, 1.5, true);
+                    }
+
+                    break;
+                }
+                else
+                {
+                    vec3 L = CosineSampleHemisphere();
+                    float pdf = CosineSampleHemispherePDF(L.z);
+                    L = ChangeBasis(L, nrm);
+                    pdf = clamp(pdf, 0.01, 10000);
+                    roughness = max(0.04, roughness);
+
+                    vec3 brdf = 2.0 * CookTorranceBrdf(nrm, -dir, L, baseColor, roughness, metalness, 1.5, true);
+                    throughput *= brdf * max(dot(nrm, L), 0.0) / pdf;
+                    dir = L;
+                    origin = OffsetPointByNormal(pos, flatNrm);
+                }
+            }
+            else {
+                origin = OffsetPointByNormal(pos, flatNrm);
+                dir = reflect(dir, nrm);
+                throughput *= baseColor;
+            }
+
+            float lum = LuminanceRGB(throughput);
+            if (lum < 0.001)
+                break;
+
+            if (i > 3) {
+                float q = max(0.05, 1 - lum);
+                if (RandomUNorm() < q)
+                    break;
+                throughput /= 1 - q;
             }
         }
     }

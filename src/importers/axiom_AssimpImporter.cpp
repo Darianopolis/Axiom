@@ -99,6 +99,7 @@ namespace axiom
         u32 aiFlags = 0;
         aiFlags |= aiProcess_JoinIdenticalVertices;
         aiFlags |= aiProcess_Triangulate;
+        aiFlags |= aiProcess_SortByPType;
 
         // aiFlags |= aiProcess_GenSmoothNormals;
         // aiFlags |= aiProcess_CalcTangentSpace;
@@ -161,6 +162,11 @@ namespace axiom
             return;
         }
 
+        if (mesh->mPrimitiveTypes != aiPrimitiveType_TRIANGLE) {
+            NOVA_LOG("Mesh [{}] contains non-triangle primitives, skipping", mesh->mName.C_Str());
+            return;
+        }
+
         importer.scene->meshes.emplace_back(outMesh);
         outMesh->positionAttribs.resize(vertexCount);
         outMesh->shadingAttribs.resize(vertexCount);
@@ -183,17 +189,12 @@ namespace axiom
             outMesh->indices[i * 3 + 0] = mesh->mFaces[i].mIndices[0];
             outMesh->indices[i * 3 + 1] = mesh->mFaces[i].mIndices[1];
             outMesh->indices[i * 3 + 2] = mesh->mFaces[i].mIndices[2];
-            // NOVA_LOG("Tri[{}] = ({}, {}, {})", i,
-            //     mesh->mFaces[i].mIndices[0],
-            //     mesh->mFaces[i].mIndices[1],
-            //     mesh->mFaces[i].mIndices[2]);
         }
 
         // Positions
         for (u32 i = 0; i < mesh->mNumVertices; ++i) {
             auto& pos = mesh->mVertices[i];
             outMesh->positionAttribs[i] = Vec3(pos.x, pos.y, pos.z);
-            // NOVA_LOG("Pos[{}] = ({}, {}, {})", i, pos.x, pos.y, pos.z);
         }
 
         // Tangent space
@@ -681,8 +682,8 @@ namespace axiom
 
                 outMaterial->metalness_roughness = makePixelImage({
                     0.f,
-                    mFactor.value_or(0.f),
                     rFactor.value_or(0.5f),
+                    mFactor.value_or(0.f),
                 });
             }
         }
@@ -730,9 +731,6 @@ namespace axiom
         Mat4 transform = std::bit_cast<Mat4>(node->mTransformation);
         transform = glm::transpose(transform);
         transform = parentTransform * transform;
-
-        // (void)parentTransform;
-        // Mat4 transform = Mat4(1.f);
 
         for (u32 i = 0; i < node->mNumMeshes; ++i) {
 #ifdef AXIOM_TRACE_IMPORT // ---------------------------------------------------

@@ -75,6 +75,8 @@ namespace axiom
         nova::Buffer             instanceDataBuffer;
         nova::HashMap<void*, CompiledMesh> meshData;
 
+        nova::Buffer noiseBuffer;
+
         nova::Buffer tlasInstanceBuffer;
 
         nova::RayTracingPipeline pipeline;
@@ -112,8 +114,12 @@ namespace axiom
 
         renderer->linearSampler = nova::Sampler::Create(context, nova::Filter::Linear, nova::AddressMode::Repeat, nova::BorderColor::TransparentBlack, 16.f);
         renderer->linearSamplerIdx = heapSlots->Acquire();
+        heap.WriteSampler(renderer->linearSamplerIdx, renderer->linearSampler);
 
         renderer->accumulationTargetIdx = heapSlots->Acquire();
+
+        renderer->noiseBuffer = nova::Buffer::Create(context, 0, nova::BufferUsage::Storage,
+            nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
         return renderer;
     }
@@ -130,6 +136,7 @@ namespace axiom
         tlasInstanceBuffer.Destroy();
         geometryInfoBuffer.Destroy();
         instanceDataBuffer.Destroy();
+        noiseBuffer.Destroy();
         hitGroups.Destroy();
 
         for (auto&[p, data] : meshData) {
@@ -502,6 +509,18 @@ namespace axiom
             sampleCount = 0;
         }
 
+        // Randomness
+
+        {
+            u32 noiseLen = size.x + size.y + 8;
+            noiseBuffer.Resize(noiseLen * sizeof(u32));
+
+            u32* noise = reinterpret_cast<u32*>(noiseBuffer.GetMapped());
+            for (u32 i = 0; i < noiseLen; ++i) {
+                noise[i] = rng();
+            }
+        }
+
         // Trace rays
 
         struct PC_RayTrace
@@ -509,6 +528,7 @@ namespace axiom
             u64       tlas;
             u64 geometries;
             u64  instances;
+            u64  noiseSeed;
 
             nova::DescriptorHandle target;
 
@@ -533,6 +553,7 @@ namespace axiom
             .tlas = tlas.GetAddress(),
             .geometries = geometryInfoBuffer.GetAddress(),
             .instances = instanceDataBuffer.GetAddress(),
+            .noiseSeed = noiseBuffer.GetAddress(),
             .target = accumulationTargetIdx,
             .pos = viewPos,
             .camX = viewRot * Vec3(1.f, 0.f, 0.f),
