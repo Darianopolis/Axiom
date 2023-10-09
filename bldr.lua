@@ -4,9 +4,14 @@ if Project "axiom" then
     Import {
         "nova",
         "meshoptimizer",
-        "fastgltf",
         "stb",
+
         "assimp",
+        "fastgltf",
+
+        "fast-obj",
+
+        "ufbx",
     }
     Artifact { "out/main", type = "Console" }
 end

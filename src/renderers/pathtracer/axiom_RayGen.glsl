@@ -117,11 +117,27 @@ void main()
     //     return;
     // }
 
+    // Write out location
+
+    const uint PixelSize = 2;
+    const uint PixelArea = PixelSize * PixelSize;
+
+    uint ox = (pc.sampleCount % PixelArea) / PixelSize;
+    uint oy = (pc.sampleCount % PixelSize);
+    ivec2 imgPosBase = ivec2(gl_LaunchIDEXT.xy) * ivec2(PixelSize) + ivec2(ox, oy);
+
     // Pixel
 
-    vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy);
-    pixelCenter += pc.jitter;
-    vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
+    // vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy);
+    // pixelCenter += pc.jitter;
+    // vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
+    // vec2 d = inUV * 2.0 - 1.0;
+    // vec3 focalPoint = pc.camZOffset * cross(pc.camX, pc.camY);
+    // vec3 origin = pc.pos;
+
+    vec2 pixelCenter = imgPosBase;
+    pixelCenter += pc.jitter * vec2(PixelSize);
+    vec2 inUV = pixelCenter / (vec2(gl_LaunchSizeEXT.xy) * vec2(PixelSize));
     vec2 d = inUV * 2.0 - 1.0;
     vec3 focalPoint = pc.camZOffset * cross(pc.camX, pc.camY);
     vec3 origin = pc.pos;
@@ -164,22 +180,52 @@ void main()
     for (uint i = 0; i < maxDepth; ++i) {
 
         hitObjectNV hit;
+
+        // Stochastically kill rays
+
+        bool killRay = false;
+        if (i > 0) {
+            float lum = LuminanceRGB(throughput);
+            if (lum < 0.001)
+                killRay = true;
+
+            if (i > 3) {
+                float q = max(0.05, 1 - lum);
+                if (RandomUNorm() < q)
+                    killRay = true;
+                throughput /= 1 - q;
+            }
+        }
+
+        // Trace ray with kill mask
+
         hitObjectTraceRayNV(hit,
             accelerationStructureEXT(pc.tlas),
-            0,       // Flags
-            0xFF,    // Hit Mask
-            0,       // sbtOffset
-            1,       // sbtStride
-            0,       // missOffset
-            origin,  // rayOrigin
-            0.0,     // tMin
-            dir,     // rayDir
-            8000000, // tMax
-            0);      // payload
+            0,                         // Flags
+            0xFF * (1 - int(killRay)), // Hit Mask
+            0,                         // sbtOffset
+            1,                         // sbtStride
+            0,                         // missOffset
+            origin,                    // rayOrigin
+            0.0,                       // tMin
+            dir,                       // rayDir
+            8000000,                   // tMax
+            0);                        // payload
 
-        // TODO: Only reorder on bounces
+        // Reorder and kill
+
         if (i > 0) {
-            reorderThreadNV(hit);
+            uint hint = 0;
+            const uint CH_NumBits = 1;
+            const uint CH_KillRay = 1;
+
+            hint |= CH_NumBits * int(killRay);
+
+            reorderThreadNV(hit, hint, CH_NumBits);
+
+            if (killRay) {
+                break;
+            }
         }
 
         if (!hitObjectIsHitNV(hit)) {
@@ -387,30 +433,39 @@ void main()
                 dir = reflect(dir, nrm);
                 throughput *= baseColor;
             }
-
-            float lum = LuminanceRGB(throughput);
-            if (lum < 0.001)
-                break;
-
-            if (i > 3) {
-                float q = max(0.05, 1 - lum);
-                if (RandomUNorm() < q)
-                    break;
-                throughput /= 1 - q;
-            }
         }
     }
 
-    vec4 prev = imageLoad(RWImage2D[pc.target], ivec2(gl_LaunchIDEXT.xy));
-    vec4 new = vec4(color, 1);
 
-    float oldWeight = float(pc.sampleCount) / float(pc.sampleCount + 1);
-    float newWeight = 1 - oldWeight;
+    // vec4 prev = imageLoad(RWImage2D[pc.target], ivec2(gl_LaunchIDEXT.xy));
+    // vec4 new = vec4(color, 1);
 
-    // Check for oldWeight = 0 to avoid inf/nan propagating over reset
-    vec4 updated = (oldWeight == 0)
-        ? new
-        : (prev * oldWeight) + (new * newWeight);
+    // float oldWeight = float(pc.sampleCount) / float(pc.sampleCount + 1);
+    // float newWeight = 1 - oldWeight;
 
-    imageStore(RWImage2D[pc.target], ivec2(gl_LaunchIDEXT.xy), updated);
+    // // Check for oldWeight = 0 to avoid inf/nan propagating over reset
+    // vec4 updated = (oldWeight == 0)
+    //     ? new
+    //     : (prev * oldWeight) + (new * newWeight);
+
+    // imageStore(RWImage2D[pc.target], ivec2(gl_LaunchIDEXT.xy), updated);
+
+    for (int dx = 0; dx < PixelSize; dx++) {
+        for (int dy = 0; dy < PixelSize; dy++) {
+            ivec2 imgPos = imgPosBase + ivec2(dx, dy);
+
+            vec4 prev = imageLoad(RWImage2D[pc.target], imgPos);
+            vec4 new = vec4(color, 1);
+
+            float oldWeight = float(pc.sampleCount) / float(pc.sampleCount + 1);
+            float newWeight = 1 - oldWeight;
+
+            // Check for oldWeight = 0 to avoid inf/nan propagating over reset
+            vec4 updated = (oldWeight == 0)
+                ? new
+                : (prev * oldWeight) + (new * newWeight);
+
+            imageStore(RWImage2D[pc.target], imgPos, updated);
+        }
+    }
 }

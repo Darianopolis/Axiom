@@ -230,7 +230,9 @@ namespace axiom
 
         if (missingNormalsOrTangents || settings.genTBN)
         {
+#ifdef AXIOM_TRACE_IMPORT // ---------------------------------------------------
             NOVA_LOG("      Regenerating tangent space: {}", missingNormalsOrTangents ? "missing" : "forced");
+#endif // ----------------------------------------------------------------------
 
             summedAreas.resize(shadingAttribs.size());
 

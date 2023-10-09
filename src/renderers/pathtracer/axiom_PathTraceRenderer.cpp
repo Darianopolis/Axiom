@@ -97,6 +97,7 @@ namespace axiom
         PathTraceRenderer();
         ~PathTraceRenderer();
 
+        void Init();
         void CompileMaterials(nova::CommandPool cmdPool, nova::Fence fence);
 
         virtual void CompileScene(Scene& scene, nova::CommandPool cmdPool, nova::Fence fence);
@@ -125,6 +126,11 @@ namespace axiom
     }
 
     PathTraceRenderer::PathTraceRenderer()
+    {
+
+    }
+
+    void PathTraceRenderer::Init()
     {
 
     }
@@ -566,7 +572,8 @@ namespace axiom
 
         sampleCount++;
 
-        cmd.TraceRays(pipeline, target.GetExtent(), hitGroups.GetAddress(), 1);
+        // cmd.TraceRays(pipeline, target.GetExtent(), hitGroups.GetAddress(), 1);
+        cmd.TraceRays(pipeline, Vec3U(Vec2U(target.GetExtent()) / Vec2U(2), 1), hitGroups.GetAddress(), 1);
 
         // Post process
 

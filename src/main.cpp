@@ -27,6 +27,23 @@ constexpr std::string_view UsageString =
 
 int main(int argc, char* argv[])
 {
+    // if (true) {
+    //     std::filesystem::path path = argv[1];
+
+    //     axiom::Scene scene;
+
+    //     if (path.extension() == ".fbx") {
+    //         axiom::ImportFbx(scene, path);
+    //     } else if (path.extension() == ".obj") {
+    //         axiom::ImportObj(scene, path);
+    //     } else {
+    //         NOVA_LOG("Unknown file extension: {}", path.extension().string());
+    //         return 1;
+    //     }
+
+    //     return 0;
+    // }
+
     bool pathTrace = false;
     bool raster = false;
     axiom::ImportSettings settings;
@@ -168,12 +185,23 @@ int main(int argc, char* argv[])
     NOVA_LOG("Rendering scene...");
 // -----------------------------------------------------------------------------
 
-    Vec3 position{ 0.f, 0.f, 2.f };
-    Quat rotation{ Vec3(0.f) };
+    Quat rotation;
+    Vec3 position{ -4.84f, 5.64f, 12.8f };
+    rotation.x = -0.14f;
+    rotation.y =  0.16f;
+    rotation.z =  0.02f;
+    rotation.w =  0.98f;
+    // Vec3 position{ 50.61f, 2.58f, 21.04f };
+    // rotation.x =  0.05f;
+    // rotation.y =  0.81f;
+    // rotation.z =  0.07f;
+    // rotation.w = -0.58f;
+    // rotation = glm::normalize(rotation);
     static f32 moveSpeed = 1.f;
 
     auto lastUpdateTime = std::chrono::steady_clock::now();
     auto lastReportTime = lastUpdateTime;
+    // auto start = std::chrono::steady_clock::now();
     u64 frames = 0;
     f32 fps = 0.f;
 
@@ -208,9 +236,15 @@ int main(int argc, char* argv[])
         if (now - lastReportTime > 1s)
         {
             fps = frames / duration_cast<duration<f32>>(now - lastReportTime).count();
+            // fps = (frames - 1000) / duration_cast<duration<f32>>(now - start).count();
             lastReportTime = now;
             frames = 0;
         }
+
+        // if (frames < 1000) {
+        //     fps = 0;
+        //     start = now;
+        // }
 
         // Camera
 
@@ -281,6 +315,8 @@ int main(int argc, char* argv[])
             NOVA_CLEANUP(&) { ImGui::End(); };
 
             ImGui::Text("Frametime: %s (%.2f fps)", nova::DurationToString(1s / fps).c_str(), fps);
+            ImGui::Text("Position: (%.2f, %.2f, %.2f)", position.x, position.y, position.z);
+            ImGui::Text("Rotation: (%.2f, %.2f, %.2f, %.2f)", rotation.x, rotation.y, rotation.z, rotation.w);
         }
 
         imgui.EndFrame();
