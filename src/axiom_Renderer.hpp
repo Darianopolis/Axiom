@@ -11,7 +11,7 @@ namespace axiom
     {
         virtual ~Renderer() = 0;
 
-        virtual void CompileScene(Scene& scene, nova::CommandPool cmdPool, nova::Fence fence) = 0;
+        virtual void CompileScene(LoadableScene& scene, nova::CommandPool cmdPool, nova::Fence fence) = 0;
 
         virtual void SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov) = 0;
         virtual void Record(nova::CommandList cmd, nova::Texture target, u32 targetIdx) = 0;

@@ -142,7 +142,7 @@ namespace axiom
         u32 texCoords;
     };
 
-    struct TextureMap : nova::RefCounted
+    struct UVTexture : nova::RefCounted
     {
         Vec2U           size;
         std::vector<b8> data;
@@ -151,13 +151,13 @@ namespace axiom
         f32 maxAlpha = 0.f;
     };
 
-    struct Material : nova::RefCounted
+    struct UVMaterial : nova::RefCounted
     {
-        nova::Ref<TextureMap>     baseColor_alpha;
-        nova::Ref<TextureMap>             normals;
-        nova::Ref<TextureMap>          emissivity;
-        nova::Ref<TextureMap>        transmission;
-        nova::Ref<TextureMap> metalness_roughness;
+        nova::Ref<UVTexture>     baseColor_alpha;
+        nova::Ref<UVTexture>             normals;
+        nova::Ref<UVTexture>          emissivity;
+        nova::Ref<UVTexture>        transmission;
+        nova::Ref<UVTexture> metalness_roughness;
 
         f32  alphaCutoff = 0.5f;
         bool   alphaMask = false;
@@ -167,36 +167,36 @@ namespace axiom
         bool       decal = false;
     };
 
-    struct SubMesh
+    struct TriSubMesh
     {
-        u32             vertexOffset;
-        u32                maxVertex;
-        u32               firstIndex;
-        u32               indexCount;
-        nova::Ref<Material> material;
+        u32               vertexOffset;
+        u32                  maxVertex;
+        u32                 firstIndex;
+        u32                 indexCount;
+        nova::Ref<UVMaterial> material;
     };
 
-    struct Mesh : nova::RefCounted
+    struct TriMesh : nova::RefCounted
     {
         std::vector<Vec3>         positionAttribs;
         std::vector<ShadingAttrib> shadingAttribs;
         std::vector<u32>                  indices;
 
-        std::vector<SubMesh> subMeshes;
+        std::vector<TriSubMesh> subMeshes;
     };
 
-    struct MeshInstance : nova::RefCounted
+    struct TriMeshInstance : nova::RefCounted
     {
-        nova::Ref<Mesh> mesh;
-        nova::Mat4 transform;
+        nova::Ref<TriMesh> mesh;
+        nova::Mat4    transform;
     };
 
-    struct Scene
+    struct LoadableScene
     {
-        std::vector<nova::Ref<TextureMap>>    textures;
-        std::vector<nova::Ref<Material>>     materials;
-        std::vector<nova::Ref<Mesh>>            meshes;
-        std::vector<nova::Ref<MeshInstance>> instances;
+        std::vector<nova::Ref<UVTexture>>        textures;
+        std::vector<nova::Ref<UVMaterial>>      materials;
+        std::vector<nova::Ref<TriMesh>>            meshes;
+        std::vector<nova::Ref<TriMeshInstance>> instances;
 
         inline
         void DebugDump()

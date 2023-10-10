@@ -8,7 +8,7 @@
 
 namespace axiom
 {
-    void ImportFbx(Scene&, std::filesystem::path path)
+    void ImportFbx(LoadableScene&, std::filesystem::path path)
     {
         std::string pathStr = path.string();
         const char* pPath = pathStr.c_str();

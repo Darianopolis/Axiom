@@ -23,13 +23,14 @@ namespace axiom
 
     struct RasterRenderer : Renderer
     {
-        Scene* scene = nullptr;
+        LoadableScene* scene = nullptr;
 
         nova::Context context;
 
         nova::Buffer     posAttribBuffer;
         nova::Buffer shadingAttribBuffer;
         nova::Buffer         indexBuffer;
+
         nova::HashMap<void*, std::pair<i32, u32>> meshOffsets;
 
         nova::Buffer transformBuffer;
@@ -47,7 +48,7 @@ namespace axiom
         RasterRenderer();
         ~RasterRenderer();
 
-        virtual void CompileScene(Scene& scene, nova::CommandPool cmdPool, nova::Fence fence);
+        virtual void CompileScene(LoadableScene& scene, nova::CommandPool cmdPool, nova::Fence fence);
 
         virtual void SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov);
         virtual void Record(nova::CommandList cmd, nova::Texture target, u32 targetIdx);
@@ -81,7 +82,7 @@ namespace axiom
         depthImage.Destroy();
     }
 
-    void RasterRenderer::CompileScene(Scene& _scene, nova::CommandPool cmdPool, nova::Fence fence)
+    void RasterRenderer::CompileScene(LoadableScene& _scene, nova::CommandPool cmdPool, nova::Fence fence)
     {
         (void)cmdPool;
         (void)fence;

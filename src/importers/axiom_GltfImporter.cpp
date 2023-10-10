@@ -13,19 +13,19 @@ namespace axiom
 {
     struct GltfImporter : Importer
     {
-        Scene* scene;
+        LoadableScene* scene;
 
-        GltfImporter(Scene& scene);
+        GltfImporter(LoadableScene& scene);
 
         virtual void Import(std::filesystem::path gltf, const ImportSettings& settings, std::optional<std::string_view> scene = {});
     };
 
-    nova::Ref<Importer> CreateGltfImporter(Scene& scene)
+    nova::Ref<Importer> CreateGltfImporter(LoadableScene& scene)
     {
         return nova::Ref<GltfImporter>::Create(scene);
     }
 
-    GltfImporter::GltfImporter(Scene& _scene)
+    GltfImporter::GltfImporter(LoadableScene& _scene)
         : scene(&_scene)
     {}
 
@@ -38,9 +38,9 @@ namespace axiom
         std::filesystem::path          baseDir;
         std::unique_ptr<fastgltf::Asset> asset;
 
-        std::vector<nova::Ref<Mesh>>         meshes;
-        std::vector<nova::Ref<TextureMap>> textures;
-        std::vector<nova::Ref<Material>>  materials;
+        std::vector<nova::Ref<TriMesh>>       meshes;
+        std::vector<nova::Ref<UVTexture>>   textures;
+        std::vector<nova::Ref<UVMaterial>> materials;
 
         struct ShadingAttribUnpacked
         {
@@ -197,7 +197,7 @@ namespace axiom
         usz vertexOffset = 0;
         usz indexOffset = 0;
 
-        auto outMesh = nova::Ref<Mesh>::Create();
+        auto outMesh = nova::Ref<TriMesh>::Create();
         importer.scene->meshes.emplace_back(outMesh);
         meshes.emplace_back(outMesh);
         outMesh->positionAttribs.resize(vertexCount);
@@ -393,7 +393,7 @@ namespace axiom
 
     void GltfImporterImpl::ProcessTexture(u32 index, fastgltf::Texture& texture)
     {
-        auto outTexture = nova::Ref<TextureMap>::Create();
+        auto outTexture = nova::Ref<UVTexture>::Create();
         textures[index] = outTexture;
 
         if (texture.imageIndex) {
@@ -506,7 +506,7 @@ namespace axiom
     {
         (void)index;
 
-        auto outMaterial = nova::Ref<Material>::Create();
+        auto outMaterial = nova::Ref<UVMaterial>::Create();
         materials.emplace_back(outMaterial);
         importer.scene->materials.emplace_back(outMaterial);
 
@@ -528,7 +528,7 @@ namespace axiom
                 return textures[singlePixelTextures.at(encoded)];
             }
 
-            auto image = Ref<TextureMap>::Create();
+            auto image = Ref<UVTexture>::Create();
             image->size = Vec2(1);
             image->data = { b8(data[0]), b8(data[1]), b8(data[2]), b8(data[3]) };
 
@@ -611,7 +611,7 @@ namespace axiom
             NOVA_LOG("  - Mesh Instance: {:>{}} -> {}", node.name, debugLongestNodeName, asset->meshes[node.meshIndex.value()].name);
 #endif // ----------------------------------------------------------------------
             importer.scene->instances.emplace_back(
-                new MeshInstance{ {}, meshes[node.meshIndex.value()], transform });
+                new TriMeshInstance{ {}, meshes[node.meshIndex.value()], transform });
         }
 
         for (auto& childIndex : node.children) {

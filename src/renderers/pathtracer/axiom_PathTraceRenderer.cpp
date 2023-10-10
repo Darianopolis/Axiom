@@ -50,7 +50,7 @@ namespace axiom
 
     struct PathTraceRenderer : Renderer
     {
-        Scene* scene = nullptr;
+        LoadableScene* scene = nullptr;
 
         nova::Context          context;
         nova::DescriptorHeap      heap;
@@ -100,7 +100,7 @@ namespace axiom
         void Init();
         void CompileMaterials(nova::CommandPool cmdPool, nova::Fence fence);
 
-        virtual void CompileScene(Scene& scene, nova::CommandPool cmdPool, nova::Fence fence);
+        virtual void CompileScene(LoadableScene& scene, nova::CommandPool cmdPool, nova::Fence fence);
 
         virtual void SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov);
         virtual void Record(nova::CommandList cmd, nova::Texture target, u32 targetIdx);
@@ -219,7 +219,7 @@ namespace axiom
         }
     }
 
-    void PathTraceRenderer::CompileScene(Scene& _scene, nova::CommandPool cmdPool, nova::Fence fence)
+    void PathTraceRenderer::CompileScene(LoadableScene& _scene, nova::CommandPool cmdPool, nova::Fence fence)
     {
         scene = &_scene;
 

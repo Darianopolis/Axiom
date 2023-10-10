@@ -30,7 +30,7 @@ int main(int argc, char* argv[])
     // if (true) {
     //     std::filesystem::path path = argv[1];
 
-    //     axiom::Scene scene;
+    //     axiom::LoadableScene scene;
 
     //     if (path.extension() == ".fbx") {
     //         axiom::ImportFbx(scene, path);
@@ -98,7 +98,7 @@ int main(int argc, char* argv[])
     NOVA_TIMEIT_RESET();
 // -----------------------------------------------------------------------------
 
-    axiom::Scene scene;
+    axiom::LoadableScene scene;
 
     auto importer = useAssimp
         ? axiom::CreateAssimpImporter(scene)

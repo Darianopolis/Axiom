@@ -4,7 +4,9 @@ if Project "axiom" then
     Import {
         "nova",
         "meshoptimizer",
+
         "stb",
+        "bc7enc",
 
         "assimp",
         "fastgltf",

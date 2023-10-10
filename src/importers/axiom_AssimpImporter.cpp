@@ -14,19 +14,19 @@ namespace axiom
 {
     struct AssimpImporter : Importer
     {
-        Scene* scene;
+        LoadableScene* scene;
 
-        AssimpImporter(Scene& scene);
+        AssimpImporter(LoadableScene& scene);
 
         virtual void Import(std::filesystem::path gltf, const ImportSettings& settings, std::optional<std::string_view> scene = {});
     };
 
-    nova::Ref<Importer> CreateAssimpImporter(Scene& scene)
+    nova::Ref<Importer> CreateAssimpImporter(LoadableScene& scene)
     {
         return nova::Ref<AssimpImporter>::Create(scene);
     }
 
-    AssimpImporter::AssimpImporter(Scene& _scene)
+    AssimpImporter::AssimpImporter(LoadableScene& _scene)
         : scene(&_scene)
     {}
 
@@ -48,12 +48,12 @@ namespace axiom
         Assimp::Importer assimpImporter;
         const aiScene*            asset = nullptr;
 
-        std::vector<nova::Ref<Mesh>>         meshes;
-        std::vector<nova::Ref<Material>>  materials;
+        std::vector<nova::Ref<TriMesh>>        meshes;
+        std::vector<nova::Ref<UVMaterial>>  materials;
 
-        nova::HashMap<std::filesystem::path, nova::Ref<TextureMap>> textures;
+        nova::HashMap<std::filesystem::path, nova::Ref<UVTexture>> textures;
 
-        nova::HashMap<TextureMap*, TextureOperations> textureOperations;
+        nova::HashMap<UVTexture*, TextureOperations> textureOperations;
 
         struct ShadingAttribUnpacked
         {
@@ -65,7 +65,7 @@ namespace axiom
         std::vector<ShadingAttribUnpacked> shadingAttribs;
         std::vector<f32>                      summedAreas;
 
-        nova::HashMap<u32, nova::Ref<TextureMap>> singlePixelTextures;
+        nova::HashMap<u32, nova::Ref<UVTexture>> singlePixelTextures;
 
 #ifdef AXIOM_TRACE_IMPORT // ---------------------------------------------------
         u32 debugLongestNodeName;
@@ -81,7 +81,7 @@ namespace axiom
         void ProcessMesh(aiMesh* mesh);
 
         void ProcessTextures();
-        void ProcessTexture(TextureMap* outTexture, const std::filesystem::path& texture);
+        void ProcessTexture(UVTexture* outTexture, const std::filesystem::path& texture);
 
         void ProcessMaterials();
         void ProcessMaterial(u32 index, aiMaterial* material);
@@ -154,7 +154,7 @@ namespace axiom
 
         // TODO: Identify decals
 
-        auto outMesh = nova::Ref<Mesh>::Create();
+        auto outMesh = nova::Ref<TriMesh>::Create();
         meshes.emplace_back(outMesh);
 
         if (!mesh->HasPositions()) {
@@ -346,7 +346,7 @@ namespace axiom
         NOVA_LOG("Loading {} textures...", asset->mNumTextures);
 #endif // ----------------------------------------------------------------------
 
-        std::vector<std::pair<const std::filesystem::path*, TextureMap*>> flatTextures;
+        std::vector<std::pair<const std::filesystem::path*, UVTexture*>> flatTextures;
         for (auto&[path, texture] : textures) {
             flatTextures.emplace_back(&path, texture.Raw());
         }
@@ -369,7 +369,7 @@ namespace axiom
         }
     }
 
-    void AssimpImporterImpl::ProcessTexture(TextureMap* outTexture, const std::filesystem::path& texture)
+    void AssimpImporterImpl::ProcessTexture(UVTexture* outTexture, const std::filesystem::path& texture)
     {
         {
             int width, height, channels;
@@ -485,7 +485,7 @@ namespace axiom
 
     void AssimpImporterImpl::ProcessMaterial(u32/* index*/, aiMaterial* material)
     {
-        auto outMaterial = nova::Ref<Material>::Create();
+        auto outMaterial = nova::Ref<UVMaterial>::Create();
         materials.emplace_back(outMaterial);
         importer.scene->materials.emplace_back(outMaterial);
 
@@ -573,7 +573,7 @@ namespace axiom
         }
 #endif // ----------------------------------------------------------------------
 
-        auto findImage = [&](Span<aiTextureType> texTypes) -> std::optional<Ref<TextureMap>> {
+        auto findImage = [&](Span<aiTextureType> texTypes) -> std::optional<Ref<UVTexture>> {
             auto path = findImagePath(texTypes);
             if (!path) return std::nullopt;
 
@@ -585,7 +585,7 @@ namespace axiom
             NOVA_LOG("  found file: {}", p.string());
             auto& texture = textures[std::move(p)];
             if (!texture) {
-                texture = Ref<TextureMap>::Create();
+                texture = Ref<UVTexture>::Create();
             }
             return texture;
         };
@@ -629,7 +629,7 @@ namespace axiom
                 return singlePixelTextures.at(encoded);
             }
 
-            auto image = Ref<TextureMap>::Create();
+            auto image = Ref<UVTexture>::Create();
             image->size = Vec2(1);
             image->data = { b8(data[0]), b8(data[1]), b8(data[2]), b8(data[3]) };
 
@@ -742,7 +742,7 @@ namespace axiom
                 asset->mMeshes[node->mMeshes[i]]->mName.C_Str());
 #endif // ----------------------------------------------------------------------
             importer.scene->instances.emplace_back(
-                new MeshInstance{ {}, meshes[node->mMeshes[i]], transform });
+                new TriMeshInstance{ {}, meshes[node->mMeshes[i]], transform });
         }
 
         for (u32 i = 0; i < node->mNumChildren; ++i) {

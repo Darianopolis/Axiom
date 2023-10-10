@@ -4,7 +4,7 @@
 
 namespace axiom
 {
-    void ImportObj(Scene& scene, std::filesystem::path path)
+    void ImportObj(LoadableScene& scene, std::filesystem::path path)
     {
         (void)scene;
 

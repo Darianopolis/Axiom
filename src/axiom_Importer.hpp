@@ -6,9 +6,9 @@ namespace axiom
 {
     struct ImportSettings
     {
-        bool genTBN;
-        bool flipUVs;
-        bool flipNormalMapZ;
+        bool         genTBN = false;
+        bool        flipUVs = false;
+        bool flipNormalMapZ = false;
     };
 
     struct Importer : nova::RefCounted
@@ -21,8 +21,8 @@ namespace axiom
     inline
     Importer::~Importer() = default;
 
-    nova::Ref<Importer> CreateGltfImporter(Scene& scene);
-    nova::Ref<Importer> CreateAssimpImporter(Scene& scene);
-    void ImportObj(Scene& scene, std::filesystem::path path);
-    void ImportFbx(Scene& scene, std::filesystem::path path);
+    nova::Ref<Importer> CreateGltfImporter(LoadableScene& scene);
+    nova::Ref<Importer> CreateAssimpImporter(LoadableScene& scene);
+    void ImportObj(LoadableScene& scene, std::filesystem::path path);
+    void ImportFbx(LoadableScene& scene, std::filesystem::path path);
 }
