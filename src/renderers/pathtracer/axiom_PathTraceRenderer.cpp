@@ -5,6 +5,8 @@
 
 #include <nova/rhi/vulkan/nova_VulkanRHI.hpp>
 
+#include <rdo_bc_encoder.h>
+
 namespace axiom
 {
     struct CompiledMesh
@@ -172,18 +174,47 @@ namespace axiom
             loadedTextures.insert({ texture.Raw(), {} });
         }
 
+        bc7enc_compress_block_init();
+        constexpr bool NoBc7 = true;
+
 #pragma omp parallel for
         for (u32 i = 0; i < scene->textures.size(); ++i) {
             auto& texture = scene->textures[i];
             auto& loadedTexture = loadedTextures.at(texture.Raw());
-            loadedTexture.texture = nova::Texture::Create(context,
-                Vec3U(texture->size, 0),
-                nova::TextureUsage::Sampled,
-                nova::Format::RGBA8_UNorm,
-                {});
 
-            loadedTexture.texture.Set({}, loadedTexture.texture.GetExtent(),
-                texture->data.data());
+            if (texture->size.x < 4 || texture->size.y < 4 || NoBc7) {
+                NOVA_LOG("Loading ({} x {}) texture directly", texture->size.x, texture->size.y);
+                loadedTexture.texture = nova::Texture::Create(context,
+                    Vec3U(texture->size, 0),
+                    nova::TextureUsage::Sampled,
+                    nova::Format::RGBA8_UNorm,
+                    {});
+
+                loadedTexture.texture.Set({}, loadedTexture.texture.GetExtent(),
+                    texture->data.data());
+            } else {
+                NOVA_LOG("Loading ({} x {}) texture with BC7 compression", texture->size.x, texture->size.y);
+
+                thread_local utils::image_u8 image;
+                image.init(texture->size.x, texture->size.y);
+                std::memcpy(image.get_pixels().data(), texture->data.data(), image.get_pixels().size() * 4);
+
+                rdo_bc::rdo_bc_params params;
+                params.m_bc7enc_reduce_entropy = false;
+                params.m_rdo_multithreading = true;
+
+                thread_local rdo_bc::rdo_bc_encoder encoder;
+                encoder.init(image, params);
+                encoder.encode();
+
+                loadedTexture.texture = nova::Texture::Create(context,
+                    Vec3U(image.width(), image.height(), 0),
+                    nova::TextureUsage::Sampled | nova::TextureUsage::TransferDst,
+                    nova::Format::BC7_Unorm,
+                    {});
+
+                loadedTexture.texture.Set({}, loadedTexture.texture.GetExtent(), encoder.get_blocks());
+            }
 
 #pragma omp critical
             {
@@ -226,16 +257,16 @@ namespace axiom
         // Shaders
 
         postProcessShader = nova::Shader::Create(context, nova::ShaderStage::Compute, "main",
-            nova::glsl::Compile(nova::ShaderStage::Compute, "src/renderers/pathtracer/axiom_PostProcess.glsl", {}));
+            nova::glsl::Compile(nova::ShaderStage::Compute, "main", "src/renderers/pathtracer/axiom_PostProcess.glsl", {}));
 
         anyHitShader = nova::Shader::Create(context, nova::ShaderStage::AnyHit, "main",
-            nova::glsl::Compile(nova::ShaderStage::AnyHit, "src/renderers/pathtracer/axiom_AnyHit.glsl", {}));
+            nova::glsl::Compile(nova::ShaderStage::AnyHit, "main", "src/renderers/pathtracer/axiom_AnyHit.glsl", {}));
 
         closestHitShader = nova::Shader::Create(context, nova::ShaderStage::ClosestHit, "main",
-            nova::glsl::Compile(nova::ShaderStage::ClosestHit, "src/renderers/pathtracer/axiom_ClosestHit.glsl", {}));
+            nova::glsl::Compile(nova::ShaderStage::ClosestHit, "main", "src/renderers/pathtracer/axiom_ClosestHit.glsl", {}));
 
         rayGenShader = nova::Shader::Create(context, nova::ShaderStage::RayGen, "main",
-            nova::glsl::Compile(nova::ShaderStage::RayGen, "src/renderers/pathtracer/axiom_RayGen.glsl", {}));
+            nova::glsl::Compile(nova::ShaderStage::RayGen, "main", "src/renderers/pathtracer/axiom_RayGen.glsl", {}));
 
         constexpr u32 SBT_Opaque      = 0;
         constexpr u32 SBT_AlphaMasked = 1;
@@ -572,8 +603,8 @@ namespace axiom
 
         sampleCount++;
 
-        // cmd.TraceRays(pipeline, target.GetExtent(), hitGroups.GetAddress(), 1);
-        cmd.TraceRays(pipeline, Vec3U(Vec2U(target.GetExtent()) / Vec2U(2), 1), hitGroups.GetAddress(), 1);
+        constexpr u32 PixelSize = 2;
+        cmd.TraceRays(pipeline, Vec3U(Vec2U(target.GetExtent()) / Vec2U(PixelSize), 1), hitGroups.GetAddress(), 1);
 
         // Post process
 

@@ -186,17 +186,29 @@ int main(int argc, char* argv[])
 // -----------------------------------------------------------------------------
 
     Quat rotation;
+
+    // Bistro main
     Vec3 position{ -4.84f, 5.64f, 12.8f };
     rotation.x = -0.14f;
     rotation.y =  0.16f;
     rotation.z =  0.02f;
     rotation.w =  0.98f;
+
+    // Bistro bookshelf
     // Vec3 position{ 50.61f, 2.58f, 21.04f };
     // rotation.x =  0.05f;
     // rotation.y =  0.81f;
     // rotation.z =  0.07f;
     // rotation.w = -0.58f;
-    // rotation = glm::normalize(rotation);
+
+    // Sponza main
+    // Vec3 position{ 4.86f, 7.74f, 1.1f };
+    // rotation.x = -0.01f;
+    // rotation.y =  0.64f;
+    // rotation.z =  0.01f;
+    // rotation.w =  0.77f;
+
+    rotation = glm::normalize(rotation);
     static f32 moveSpeed = 1.f;
 
     auto lastUpdateTime = std::chrono::steady_clock::now();

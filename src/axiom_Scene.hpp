@@ -129,12 +129,12 @@ namespace axiom
 
     struct ShadingAttrib
     {
-        // // https://johnwhite3d.blogspot.com/2017/10/signed-octahedron-normal-encoding.html?view=classic
+        // https://johnwhite3d.blogspot.com/2017/10/signed-octahedron-normal-encoding.html?view=classic
         u32 octX : 10;
         u32 octY : 10;
         u32 octS :  1;
 
-        // // https://www.jeremyong.com/graphics/2023/01/09/tangent-spaces-and-diamond-encoding/
+        // https://www.jeremyong.com/graphics/2023/01/09/tangent-spaces-and-diamond-encoding/
         u32 tgtA : 10;
         u32 tgtS :  1;
 

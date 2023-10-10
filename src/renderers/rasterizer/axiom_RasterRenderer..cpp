@@ -154,10 +154,10 @@ namespace axiom
         }
 
         vertexShader = nova::Shader::Create(context, nova::ShaderStage::Vertex, "main",
-            nova::glsl::Compile( nova::ShaderStage::Vertex, "src/renderers/rasterizer/axiom_Vertex.glsl", {}));
+            nova::glsl::Compile( nova::ShaderStage::Vertex, "main", "src/renderers/rasterizer/axiom_Vertex.glsl", {}));
 
         fragmentShader = nova::Shader::Create(context, nova::ShaderStage::Fragment, "main",
-            nova::glsl::Compile(nova::ShaderStage::Fragment, "src/renderers/rasterizer/axiom_Fragment.glsl", {}));
+            nova::glsl::Compile(nova::ShaderStage::Fragment, "main", "src/renderers/rasterizer/axiom_Fragment.glsl", {}));
     }
 
     void RasterRenderer::SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov)

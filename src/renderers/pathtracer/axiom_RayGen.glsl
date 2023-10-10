@@ -42,6 +42,21 @@ float RandomUNorm()
     return 2.3283064365387e-10 * res;
 }
 
+bool IsInfZeroOrNan(vec3 V)
+{
+    float t = V.x + V.y + V.z;
+    return t == 0 || isnan(t) || isinf(t);
+}
+
+vec3 GetTangent(vec3 N)
+{
+    float s = sign(N.z);
+    float a = -1.0 / (s + N.z);
+    float b = N.x * N.y * a;
+
+    return vec3(1 + s * sqr(N.x) * a, s * b, -s * N.x);
+}
+
 vec3 ChangeBasis(vec3 v, vec3 N)
 {
     float s = sign(N.z);
@@ -99,6 +114,20 @@ float CosineSampleHemispherePDF(float cosTheta)
     return cosTheta / PI;
 }
 
+vec3 VCosineSampleHemisphere(float alpha)
+{
+    float cosTheta = pow(RandomUNorm(), 1 / (alpha + 1));
+    float sinTheta = sqrt(1 - cosTheta * cosTheta);
+    float phi = 2 * PI * RandomUNorm();
+    return vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+}
+
+float VCosineSampleHemispherePDF(vec3 v, float alpha)
+{
+    float cosTheta = v.z;
+    return (cosTheta + alpha) * pow(cosTheta, alpha) / PI;
+}
+
 void main()
 {
     {
@@ -107,15 +136,6 @@ void main()
         rnd.x = pc.noiseSeed[sx + 0].value ^ pc.noiseSeed[sy + 1].value;
         rnd.y = pc.noiseSeed[sx + 3].value ^ pc.noiseSeed[sy + 2].value;
     }
-
-    // if (true) {
-    //     vec3 color = vec3(
-    //         RandomUNorm(),
-    //         RandomUNorm(),
-    //         RandomUNorm());
-    //     imageStore(RWImage2D[pc.target], ivec2(gl_LaunchIDEXT.xy), vec4(color, 1));
-    //     return;
-    // }
 
     // Write out location
 
@@ -127,13 +147,6 @@ void main()
     ivec2 imgPosBase = ivec2(gl_LaunchIDEXT.xy) * ivec2(PixelSize) + ivec2(ox, oy);
 
     // Pixel
-
-    // vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy);
-    // pixelCenter += pc.jitter;
-    // vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
-    // vec2 d = inUV * 2.0 - 1.0;
-    // vec3 focalPoint = pc.camZOffset * cross(pc.camX, pc.camY);
-    // vec3 origin = pc.pos;
 
     vec2 pixelCenter = imgPosBase;
     pixelCenter += pc.jitter * vec2(PixelSize);
@@ -189,7 +202,7 @@ void main()
             if (lum < 0.001)
                 killRay = true;
 
-            if (i > 3) {
+            if (i > 4) {
                 float q = max(0.05, 1 - lum);
                 if (RandomUNorm() < q)
                     killRay = true;
@@ -291,12 +304,6 @@ void main()
             vec3 tangent = tgt0 * w.x + tgt1 * w.y + tgt2 * w.z;
             tangent = normalize(tgtSpaceToWorld * tangent);
 
-            // Tangent space
-            tangent = normalize(tangent - dot(tangent, vertNrm) * vertNrm);
-            float tgtSpaceSign = float(bitfieldExtract(sa0.tgtSpace, 31, 1)) * 2.0 - 1.0;
-            vec3 bitangent = normalize(cross(tangent, vertNrm) * tgtSpaceSign);
-            mat3 TBN = mat3(tangent, bitangent, vertNrm);
-
             // Tex Coords
             vec2 uv0 = unpackHalf2x16(sa0.texCoords);
             vec2 uv1 = unpackHalf2x16(sa1.texCoords);
@@ -315,11 +322,41 @@ void main()
             vec3 v02 = v2w - v0w;
             vec3 flatNrm = normalize(cross(v01, v02));
 
+            // Flat tangent
+            vec3 flatTgt;
+            {
+                vec3 v12 = v01;
+                vec3 v13 = v02;
+                vec2 u12 = uv1 - uv0;
+                vec2 u13 = uv2 - uv0;
+                float f = 1.f / (u12.x * u13.y - u13.x * u12.y);
+                flatTgt = normalize(f * vec3(
+                    u13.y * v12.x - u12.y * v13.x,
+                    u13.y * v12.y - u12.y * v13.y,
+                    u13.y * v12.z - u12.y * v13.z));
+            }
+            if (IsInfZeroOrNan(flatTgt)) {
+                flatTgt = GetTangent(flatNrm);
+            }
+
             // Side corrected normals
             if (hitKind != gl_HitKindFrontFacingTriangleEXT) {
                 vertNrm = -vertNrm;
                 flatNrm = -flatNrm;
             }
+
+            // Tangent space
+            tangent = normalize(tangent - dot(tangent, vertNrm) * vertNrm);
+            float tgtSpaceSign = float(bitfieldExtract(sa0.tgtSpace, 31, 1)) * 2.0 - 1.0;
+            vec3 bitangent = normalize(cross(tangent, vertNrm) * tgtSpaceSign);
+            mat3 TBN = mat3(tangent, bitangent, vertNrm);
+
+            // mat3 TBN;
+            // {
+            //     flatTgt = normalize(flatTgt - dot(flatTgt, flatNrm) * flatNrm);
+            //     vec3 bitangent = normalize(cross(flatTgt, flatNrm));
+            //     TBN = mat3(flatTgt, bitangent, flatNrm);
+            // }
 
             // Texture
             vec4 baseColor_alpha = texture(sampler2D(Image2D[nonuniformEXT(geometry.material.baseColor_alpha)], Sampler[pc.linearSampler]), uv);
@@ -344,6 +381,7 @@ void main()
 // -----------------------------------------------------------------------------
 // #define DEBUG_UV
 // #define DEBUG_FLAT_NRM
+// #define DEBUG_FLAT_TGT
 // #define DEBUG_VERT_NRM
 // #define DEBUG_NRM
 // #define DEBUG_TGT
@@ -358,6 +396,8 @@ void main()
             color = DebugSNorm(flatNrm);
 #elif defined(DEBUG_VERT_NRM)
             color = DebugSNorm(vertNrm);
+#elif defined(DEBUG_FLAT_TGT)
+            color = DebugSNorm(flatTgt);
 #elif defined(DEBUG_NRM)
             color = DebugSNorm(nrm);
 #elif defined(DEBUG_TGT)
@@ -386,69 +426,47 @@ void main()
             // Emissive term
             color += throughput * emissivity;
 
-            // {
-            //     // Ambient term
-            //     color += throughput * baseColor * 0.1;
-
-            //     // BRDF
-
-            //     vec3 sampleDir = RandomOnCone(SunDir, SunCosTheta);
-            //     if (IsUnobstructed(OffsetPointByNormal(pos, flatNrm), sampleDir, 8000000.0)) {
-            //         color += throughput *
-            //             CookTorranceBrdf(nrm, -dir, SunDir, baseColor, roughness, metalness, 1.5, true);
-            //     }
-
-            //     break;
-            // }
-
             if (roughness > 0.0) {
-                // BRDF
+                if (roughness > 0.0) {
+                    // BRDF
 
-                if (RandomUNorm() > 0.5)
-                {
-                    vec3 sampleDir = RandomOnCone(SunDir, SunCosTheta);
-                    if (IsUnobstructed(OffsetPointByNormal(pos, flatNrm), sampleDir, 8000000.0)) {
-                        color += throughput *
-                            CookTorranceBrdf(nrm, -dir, sampleDir, baseColor, roughness, metalness, 1.5, true);
+                    if (RandomUNorm() > 0.5)
+                    {
+                        vec3 sampleDir = RandomOnCone(SunDir, SunCosTheta);
+                        if (IsUnobstructed(OffsetPointByNormal(pos, flatNrm), sampleDir, 8000000.0)) {
+                            color += throughput *
+                                CookTorranceBrdf(nrm, -dir, sampleDir, baseColor, roughness, metalness, 1.5, true);
+                        }
+
+                        break;
                     }
+                    else
+                    {
+                        vec3 L = CosineSampleHemisphere();
+                        float pdf = CosineSampleHemispherePDF(L.z);
+                        L = ChangeBasis(L, nrm);
+                        pdf = clamp(pdf, 0.01, 10000);
+                        roughness = max(0.04, roughness);
 
-                    break;
+                        vec3 brdf = 2.0 * CookTorranceBrdf(nrm, -dir, L, baseColor, roughness, metalness, 1.5, true);
+                        throughput *= brdf * max(dot(nrm, L), 0.0) / pdf;
+                        dir = L;
+                        origin = OffsetPointByNormal(pos, flatNrm);
+                    }
                 }
-                else
-                {
-                    vec3 L = CosineSampleHemisphere();
-                    float pdf = CosineSampleHemispherePDF(L.z);
-                    L = ChangeBasis(L, nrm);
-                    pdf = clamp(pdf, 0.01, 10000);
-                    roughness = max(0.04, roughness);
-
-                    vec3 brdf = 2.0 * CookTorranceBrdf(nrm, -dir, L, baseColor, roughness, metalness, 1.5, true);
-                    throughput *= brdf * max(dot(nrm, L), 0.0) / pdf;
-                    dir = L;
+                else {
                     origin = OffsetPointByNormal(pos, flatNrm);
+                    dir = reflect(dir, nrm);
+                    throughput *= baseColor;
                 }
-            }
-            else {
+            } else {
                 origin = OffsetPointByNormal(pos, flatNrm);
                 dir = reflect(dir, nrm);
                 throughput *= baseColor;
             }
+
         }
     }
-
-
-    // vec4 prev = imageLoad(RWImage2D[pc.target], ivec2(gl_LaunchIDEXT.xy));
-    // vec4 new = vec4(color, 1);
-
-    // float oldWeight = float(pc.sampleCount) / float(pc.sampleCount + 1);
-    // float newWeight = 1 - oldWeight;
-
-    // // Check for oldWeight = 0 to avoid inf/nan propagating over reset
-    // vec4 updated = (oldWeight == 0)
-    //     ? new
-    //     : (prev * oldWeight) + (new * newWeight);
-
-    // imageStore(RWImage2D[pc.target], ivec2(gl_LaunchIDEXT.xy), updated);
 
     for (int dx = 0; dx < PixelSize; dx++) {
         for (int dy = 0; dy < PixelSize; dy++) {
