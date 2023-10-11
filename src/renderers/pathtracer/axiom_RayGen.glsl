@@ -139,7 +139,7 @@ void main()
 
     // Write out location
 
-    const uint PixelSize = 2;
+    const uint PixelSize = 1;
     const uint PixelArea = PixelSize * PixelSize;
 
     uint ox = (pc.sampleCount % PixelArea) / PixelSize;

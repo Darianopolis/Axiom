@@ -228,6 +228,53 @@ int main(int argc, char* argv[])
         if (dy < 0) moveSpeed /= 1.5f;
     });
 
+    /*
+
+    Controls
+
+    [[Control]]
+
+    - Save location
+    - Load location
+
+    [[Profiling]]
+
+    - Start capture for N seconds with fixed seed
+
+    [[Debug views]]
+
+    [[geometric attributes]]
+
+    - Geometric Normals
+    - Barycentric weights
+
+    [[vertex attributes]]
+
+    - Texture Coordinates
+    - Vertex Normals
+    - Vertex Tangents
+    - Vertex Bitangents
+
+    [[material attributes]]
+
+    - Material ID
+    - Alpha tested
+    - Thin/Volume
+    - Decal
+    - Ior
+    - Subsurface
+
+    [[texture maps]]
+
+    - Normal Map  (original)
+    - Normals Map (projected)
+    - Base color
+    - Alpha
+    - Metalness / Roughness
+    - Emissive
+
+    */
+
     NOVA_CLEANUP(&) { fence.Wait(); };
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();

@@ -177,6 +177,8 @@ namespace axiom
         bc7enc_compress_block_init();
         constexpr bool NoBc7 = true;
 
+        std::atomic_uint64_t totalResidentTextures = 0;
+
 #pragma omp parallel for
         for (u32 i = 0; i < scene->textures.size(); ++i) {
             auto& texture = scene->textures[i];
@@ -192,6 +194,8 @@ namespace axiom
 
                 loadedTexture.texture.Set({}, loadedTexture.texture.GetExtent(),
                     texture->data.data());
+
+                totalResidentTextures += texture->data.size();
             } else {
                 NOVA_LOG("Loading ({} x {}) texture with BC7 compression", texture->size.x, texture->size.y);
 
@@ -213,6 +217,8 @@ namespace axiom
                     nova::Format::BC7_Unorm,
                     {});
 
+                totalResidentTextures += encoder.get_total_blocks_size_in_bytes();
+
                 loadedTexture.texture.Set({}, loadedTexture.texture.GetExtent(), encoder.get_blocks());
             }
 
@@ -222,6 +228,8 @@ namespace axiom
                 heap.WriteSampledTexture(loadedTexture.handle, loadedTexture.texture);
             }
         }
+
+        NOVA_LOG("Total image memory resident: {}", nova::ByteSizeToString(totalResidentTextures));
 
         materialBuffer = nova::Buffer::Create(context,
             scene->materials.size() * sizeof(GPU_Material),
@@ -603,7 +611,7 @@ namespace axiom
 
         sampleCount++;
 
-        constexpr u32 PixelSize = 2;
+        constexpr u32 PixelSize = 1;
         cmd.TraceRays(pipeline, Vec3U(Vec2U(target.GetExtent()) / Vec2U(PixelSize), 1), hitGroups.GetAddress(), 1);
 
         // Post process
