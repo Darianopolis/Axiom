@@ -1,4 +1,5 @@
 #include "axiom_Common.glsl"
+#include "src/attributes/axiom_Attributes.glsl"
 
 #extension GL_EXT_ray_tracing                            : require
 #extension GL_EXT_ray_tracing_position_fetch             : require
@@ -13,9 +14,9 @@ struct RayPayload {
     vec3 position[3];
 };
 
-layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer ShadingAttrib {
-    uint  tgtSpace;
-    uint texCoords;
+layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer ShadingAttributes {
+    axiom_TangentSpace tangentSpace;
+    axiom_TexCoords       texCoords;
 };
 
 layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer Index {
@@ -41,9 +42,9 @@ layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer Ins
 };
 
 layout(buffer_reference, scalar, buffer_reference_align = 8) readonly buffer GeometryInfo {
-    ShadingAttrib shadingAttribs;
-    Index                indices;
-    Material            material;
+    ShadingAttributes shadingAttributes;
+    Index         indices;
+    Material     material;
 };
 
 layout(push_constant, scalar) uniform pc_ {
@@ -59,4 +60,5 @@ layout(push_constant, scalar) uniform pc_ {
     uint      linearSampler;
     uint        sampleCount;
     vec2             jitter;
+    uint       sampleRadius;
 } pc;

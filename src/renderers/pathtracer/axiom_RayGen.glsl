@@ -131,15 +131,20 @@ float VCosineSampleHemispherePDF(vec3 v, float alpha)
 void main()
 {
     {
-        uint sx = uint(gl_LaunchIDEXT.x);
-        uint sy = gl_LaunchSizeEXT.x + 4 + uint(gl_LaunchIDEXT.y);
-        rnd.x = pc.noiseSeed[sx + 0].value ^ pc.noiseSeed[sy + 1].value;
-        rnd.y = pc.noiseSeed[sx + 3].value ^ pc.noiseSeed[sy + 2].value;
+        // uint sx = uint(gl_LaunchIDEXT.x);
+        // uint sy = gl_LaunchSizeEXT.x + 4 + uint(gl_LaunchIDEXT.y);
+        // rnd.x = pc.noiseSeed[sx + 0].value ^ pc.noiseSeed[sy + 1].value;
+        // rnd.y = pc.noiseSeed[sx + 3].value ^ pc.noiseSeed[sy + 2].value;
+
+        uint sx = uint(gl_LaunchIDEXT.x) * 2;
+        uint sy = (gl_LaunchSizeEXT.x + uint(gl_LaunchIDEXT.y)) * 2;
+        rnd.x = pc.noiseSeed[sx + 0].value + pc.noiseSeed[sy + 1].value;
+        rnd.y = pc.noiseSeed[sx + 1].value + pc.noiseSeed[sy + 0].value;
     }
 
     // Write out location
 
-    const uint PixelSize = 1;
+    const uint PixelSize = pc.sampleRadius;
     const uint PixelArea = PixelSize * PixelSize;
 
     uint ox = (pc.sampleCount % PixelArea) / PixelSize;
@@ -186,7 +191,7 @@ void main()
 
     const vec3  SunDir       = normalize(vec3(2, 4, 1));
     // const vec3  SunDir       = normalize(vec3(-1, 1, -1));
-    const float SunIntensity = 200.0;
+    const float SunIntensity = 25.0;
     const float SkyIntensity = 50.0;
     const float SunCosTheta  = cos(radians(0.54) * 0.5);
 
@@ -267,8 +272,6 @@ void main()
             int geometryIndex = hitObjectGetGeometryIndexNV(hit);
             uint sbtIndex = hitObjectGetShaderBindingTableRecordIndexNV(hit);
             uint hitKind = hitObjectGetHitKindNV(hit);
-            // GeometryInfo geometry = pc.geometries[sbtIndex];
-            // GeometryInfo geometry = pc.geometries[pc.instances[instanceID].geometryOffset + geometryIndex];
             GeometryInfo geometry = pc.geometries[customInstanceID + geometryIndex];
 
             // Transforms
@@ -286,28 +289,22 @@ void main()
             uint i2 = geometry.indices[primID * 3 + 2].value;
 
             // Shading attributes
-            ShadingAttrib sa0 = geometry.shadingAttribs[i0];
-            ShadingAttrib sa1 = geometry.shadingAttribs[i1];
-            ShadingAttrib sa2 = geometry.shadingAttribs[i2];
+            ShadingAttributes sa0 = geometry.shadingAttributes[i0];
+            ShadingAttributes sa1 = geometry.shadingAttributes[i1];
+            ShadingAttributes sa2 = geometry.shadingAttributes[i2];
 
-            // Normals
-            vec3 nrm0 = SignedOctDecode(sa0.tgtSpace);
-            vec3 nrm1 = SignedOctDecode(sa1.tgtSpace);
-            vec3 nrm2 = SignedOctDecode(sa2.tgtSpace);
-            vec3 vertNrm = nrm0 * w.x + nrm1 * w.y + nrm2 * w.z;
-            vertNrm = normalize(tgtSpaceToWorld * vertNrm);
-
-            // Tangents
-            vec3 tgt0 = DecodeTangent(nrm0, sa0.tgtSpace);
-            vec3 tgt1 = DecodeTangent(nrm1, sa1.tgtSpace);
-            vec3 tgt2 = DecodeTangent(nrm2, sa2.tgtSpace);
-            vec3 tangent = tgt0 * w.x + tgt1 * w.y + tgt2 * w.z;
-            tangent = normalize(tgtSpaceToWorld * tangent);
+            // Normals + Tangents
+            vec3 nrm0, nrm1, nrm2, tgt0, tgt1, tgt2;
+            axiom_UnpackTangentSpace(sa0.tangentSpace, nrm0, tgt0);
+            axiom_UnpackTangentSpace(sa1.tangentSpace, nrm1, tgt1);
+            axiom_UnpackTangentSpace(sa2.tangentSpace, nrm2, tgt2);
+            vec3 vertNrm = normalize(tgtSpaceToWorld * (nrm0 * w.x + nrm1 * w.y + nrm2 * w.z));
+            vec3 tangent = normalize(tgtSpaceToWorld * (tgt0 * w.x + tgt1 * w.y + tgt2 * w.z));
 
             // Tex Coords
-            vec2 uv0 = unpackHalf2x16(sa0.texCoords);
-            vec2 uv1 = unpackHalf2x16(sa1.texCoords);
-            vec2 uv2 = unpackHalf2x16(sa2.texCoords);
+            vec2 uv0 = axiom_UnpackTexCoords(sa0.texCoords);
+            vec2 uv1 = axiom_UnpackTexCoords(sa1.texCoords);
+            vec2 uv2 = axiom_UnpackTexCoords(sa2.texCoords);
             vec2 uv = uv0 * w.x + uv1 * w.y + uv2 * w.z;
 
             // Positions
@@ -317,12 +314,10 @@ void main()
             vec3 v2w = objToWorld * vec4(rayPayload.position[2], 1);
             vec3 pos = v0w * w.x + v1w * w.y + v2w * w.z;
 
-            // Flat normal
+            // Flat Normals + Tangents
             vec3 v01 = v1w - v0w;
             vec3 v02 = v2w - v0w;
             vec3 flatNrm = normalize(cross(v01, v02));
-
-            // Flat tangent
             vec3 flatTgt;
             {
                 vec3 v12 = v01;
@@ -345,18 +340,14 @@ void main()
                 flatNrm = -flatNrm;
             }
 
-            // Tangent space
+            // Tangent Space
             tangent = normalize(tangent - dot(tangent, vertNrm) * vertNrm);
-            float tgtSpaceSign = float(bitfieldExtract(sa0.tgtSpace, 31, 1)) * 2.0 - 1.0;
-            vec3 bitangent = normalize(cross(tangent, vertNrm) * tgtSpaceSign);
+            vec3 bitangent = normalize(cross(tangent, vertNrm)
+                * axiom_UnpackBitangentSign(sa0.tangentSpace));
             mat3 TBN = mat3(tangent, bitangent, vertNrm);
-
-            // mat3 TBN;
-            // {
-            //     flatTgt = normalize(flatTgt - dot(flatTgt, flatNrm) * flatNrm);
-            //     vec3 bitangent = normalize(cross(flatTgt, flatNrm));
-            //     TBN = mat3(flatTgt, bitangent, flatNrm);
-            // }
+            // flatTgt = normalize(flatTgt - dot(flatTgt, flatNrm) * flatNrm);
+            // vec3 bitangent = normalize(cross(flatTgt, flatNrm));
+            // mat3 TBN = mat3(flatTgt, bitangent, flatNrm);
 
             // Texture
             vec4 baseColor_alpha = texture(sampler2D(Image2D[nonuniformEXT(geometry.material.baseColor_alpha)], Sampler[pc.linearSampler]), uv);
@@ -434,7 +425,7 @@ void main()
                     {
                         vec3 sampleDir = RandomOnCone(SunDir, SunCosTheta);
                         if (IsUnobstructed(OffsetPointByNormal(pos, flatNrm), sampleDir, 8000000.0)) {
-                            color += throughput *
+                            color += throughput * SunIntensity *
                                 CookTorranceBrdf(nrm, -dir, sampleDir, baseColor, roughness, metalness, 1.5, true);
                         }
 
@@ -467,6 +458,8 @@ void main()
 
         }
     }
+
+    // Write out
 
     for (int dx = 0; dx < PixelSize; dx++) {
         for (int dy = 0; dy < PixelSize; dy++) {

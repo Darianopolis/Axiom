@@ -19,14 +19,14 @@ void main()
     uint i2 = geometry.indices[gl_PrimitiveID * 3 + 2].value;
 
     // Shading attributes
-    ShadingAttrib sa0 = geometry.shadingAttribs[i0];
-    ShadingAttrib sa1 = geometry.shadingAttribs[i1];
-    ShadingAttrib sa2 = geometry.shadingAttribs[i2];
+    ShadingAttributes sa0 = geometry.shadingAttributes[i0];
+    ShadingAttributes sa1 = geometry.shadingAttributes[i1];
+    ShadingAttributes sa2 = geometry.shadingAttributes[i2];
 
     // Tex Coords
-    vec2 uv0 = unpackHalf2x16(sa0.texCoords);
-    vec2 uv1 = unpackHalf2x16(sa1.texCoords);
-    vec2 uv2 = unpackHalf2x16(sa2.texCoords);
+    vec2 uv0 = axiom_UnpackTexCoords(sa0.texCoords);
+    vec2 uv1 = axiom_UnpackTexCoords(sa1.texCoords);
+    vec2 uv2 = axiom_UnpackTexCoords(sa2.texCoords);
     vec2 uv = uv0 * w.x + uv1 * w.y + uv2 * w.z;
 
     // Texture

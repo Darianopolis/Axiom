@@ -2,6 +2,8 @@
 
 #include "axiom_Core.hpp"
 
+#include <attributes/axiom_Attributes.hpp>
+
 namespace axiom
 {
     namespace math
@@ -127,21 +129,6 @@ namespace axiom
         }
     }
 
-    struct ShadingAttrib
-    {
-        // https://johnwhite3d.blogspot.com/2017/10/signed-octahedron-normal-encoding.html?view=classic
-        u32 octX : 10;
-        u32 octY : 10;
-        u32 octS :  1;
-
-        // https://www.jeremyong.com/graphics/2023/01/09/tangent-spaces-and-diamond-encoding/
-        u32 tgtA : 10;
-        u32 tgtS :  1;
-
-        // Just boring half float quantization for this
-        u32 texCoords;
-    };
-
     struct UVTexture : nova::RefCounted
     {
         Vec2U           size;
@@ -176,11 +163,17 @@ namespace axiom
         nova::Ref<UVMaterial> material;
     };
 
+    struct ShadingAttributes
+    {
+        GPU_TangentSpace tangentSpace;
+        GPU_TexCoords       texCoords;
+    };
+
     struct TriMesh : nova::RefCounted
     {
-        std::vector<Vec3>         positionAttribs;
-        std::vector<ShadingAttrib> shadingAttribs;
-        std::vector<u32>                  indices;
+        std::vector<Vec3>             positionAttributes;
+        std::vector<ShadingAttributes> shadingAttributes;
+        std::vector<u32>                         indices;
 
         std::vector<TriSubMesh> subMeshes;
     };
@@ -204,8 +197,8 @@ namespace axiom
             for (auto[meshIdx, mesh] : meshes | std::views::enumerate) {
                 NOVA_LOG("Mesh[{}]", meshIdx);
                 NOVA_LOGEXPR(mesh->indices.size());
-                NOVA_LOGEXPR(mesh->shadingAttribs.size());
-                NOVA_LOGEXPR(mesh->positionAttribs.size());
+                NOVA_LOGEXPR(mesh->shadingAttributes.size());
+                NOVA_LOGEXPR(mesh->positionAttributes.size());
                 NOVA_LOGEXPR(mesh->subMeshes.size());
                 for (auto[subMeshIdx, subMesh] : mesh->subMeshes | std::views::enumerate) {
                     NOVA_LOG("Submesh[{}]", subMeshIdx);

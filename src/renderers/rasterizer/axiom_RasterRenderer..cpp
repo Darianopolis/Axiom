@@ -27,9 +27,9 @@ namespace axiom
 
         nova::Context context;
 
-        nova::Buffer     posAttribBuffer;
-        nova::Buffer shadingAttribBuffer;
-        nova::Buffer         indexBuffer;
+        nova::Buffer positionAttributeBuffer;
+        nova::Buffer  shadingAttributeBuffer;
+        nova::Buffer             indexBuffer;
 
         nova::HashMap<void*, std::pair<i32, u32>> meshOffsets;
 
@@ -52,6 +52,8 @@ namespace axiom
 
         virtual void SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov);
         virtual void Record(nova::CommandList cmd, nova::Texture target, u32 targetIdx);
+
+        virtual void ResetSamples() {}
     };
 
     nova::Ref<Renderer> CreateRasterRenderer(nova::Context context, nova::DescriptorHeap heap, nova::IndexFreeList* heapSlots)
@@ -70,8 +72,8 @@ namespace axiom
 
     RasterRenderer::~RasterRenderer()
     {
-        posAttribBuffer.Destroy();
-        shadingAttribBuffer.Destroy();
+        positionAttributeBuffer.Destroy();
+        shadingAttributeBuffer.Destroy();
         indexBuffer.Destroy();
         transformBuffer.Destroy();
         indirectBuffer.Destroy();
@@ -92,7 +94,7 @@ namespace axiom
         u64 vertexCount = 0;
         u64 indexCount = 0;
         for (auto& mesh : scene->meshes) {
-            vertexCount += mesh->positionAttribs.size();
+            vertexCount += mesh->positionAttributes.size();
             indexCount += mesh->indices.size();
         }
 
@@ -100,13 +102,13 @@ namespace axiom
         NOVA_LOG("Compiling, unique vertices = {}, unique indices = {}", vertexCount, indexCount);
 #endif // ----------------------------------------------------------------------
 
-        posAttribBuffer = nova::Buffer::Create(context,
+        positionAttributeBuffer = nova::Buffer::Create(context,
             vertexCount * sizeof(Vec3),
             nova::BufferUsage::Storage,
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
-        shadingAttribBuffer = nova::Buffer::Create(context,
-            vertexCount * sizeof(ShadingAttrib),
+        shadingAttributeBuffer = nova::Buffer::Create(context,
+            vertexCount * sizeof(ShadingAttributes),
             nova::BufferUsage::Storage,
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
@@ -120,9 +122,9 @@ namespace axiom
         for (auto& mesh : scene->meshes) {
             meshOffsets[mesh.Raw()] = { i32(vertexOffset), u32(indexOffset) };
 
-            posAttribBuffer.Set<Vec3>(mesh->positionAttribs, vertexOffset);
-            shadingAttribBuffer.Set<ShadingAttrib>(mesh->shadingAttribs, vertexOffset);
-            vertexOffset += mesh->positionAttribs.size();
+            positionAttributeBuffer.Set<Vec3>(mesh->positionAttributes, vertexOffset);
+            shadingAttributeBuffer.Set<ShadingAttributes>(mesh->shadingAttributes, vertexOffset);
+            vertexOffset += mesh->positionAttributes.size();
 
             indexBuffer.Set<u32>(mesh->indices, indexOffset);
             indexOffset += mesh->indices.size();
@@ -198,10 +200,10 @@ namespace axiom
 
         struct PushConstants
         {
-            u64     posAttribs;
-            u64 shadingAttribs;
-            u64      instances;
-            Mat4      viewProj;
+            u64 positionAttributes;
+            u64  shadingAttributes;
+            u64          instances;
+            Mat4          viewProj;
         };
 
         cmd.BeginRendering({{}, size}, {target}, depthImage);
@@ -209,8 +211,8 @@ namespace axiom
         cmd.ClearDepth(0.f, Vec2(size));
         cmd.BindIndexBuffer(indexBuffer, nova::IndexType::U32);
         cmd.PushConstants(PushConstants {
-            .posAttribs = posAttribBuffer.GetAddress(),
-            .shadingAttribs = shadingAttribBuffer.GetAddress(),
+            .positionAttributes = positionAttributeBuffer.GetAddress(),
+            .shadingAttributes = shadingAttributeBuffer.GetAddress(),
             .instances = transformBuffer.GetAddress(),
             .viewProj = viewProj,
         });

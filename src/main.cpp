@@ -171,6 +171,14 @@ int main(int argc, char* argv[])
         swapchain.Destroy();
     };
 
+    static f32 moveSpeed = 1.f;
+    glfwSetScrollCallback(window, [](auto, f64, f64 dy) {
+        if (!ImGui::GetIO().WantCaptureMouse) {
+            if (dy > 0) moveSpeed *= 1.5f;
+            if (dy < 0) moveSpeed /= 1.5f;
+        }
+    });
+
     auto fontIdx = heapSlots.Acquire();
     auto imgui = nova::ImGuiLayer({
         .window = window,
@@ -209,7 +217,6 @@ int main(int argc, char* argv[])
     // rotation.w =  0.77f;
 
     rotation = glm::normalize(rotation);
-    static f32 moveSpeed = 1.f;
 
     auto lastUpdateTime = std::chrono::steady_clock::now();
     auto lastReportTime = lastUpdateTime;
@@ -222,11 +229,6 @@ int main(int argc, char* argv[])
     f32 mouseSpeed = 0.0025f;
 
     auto swapchainIdx = heapSlots.Acquire();
-
-    glfwSetScrollCallback(window, [](auto, f64, f64 dy) {
-        if (dy > 0) moveSpeed *= 1.5f;
-        if (dy < 0) moveSpeed /= 1.5f;
-    });
 
     /*
 
@@ -376,6 +378,16 @@ int main(int argc, char* argv[])
             ImGui::Text("Frametime: %s (%.2f fps)", nova::DurationToString(1s / fps).c_str(), fps);
             ImGui::Text("Position: (%.2f, %.2f, %.2f)", position.x, position.y, position.z);
             ImGui::Text("Rotation: (%.2f, %.2f, %.2f, %.2f)", rotation.x, rotation.y, rotation.z, rotation.w);
+
+            ImGui::Separator();
+            if (ImGui::SliderInt("Sample Radius", reinterpret_cast<i32*>(&renderer->sampleRadius), 1, 10)) {
+                renderer->ResetSamples();
+            }
+            ImGui::Separator();
+
+            ImGui::DragFloat("Exposure", &renderer->exposure, 0.01f, 0.f, 10.f);
+            ImGui::Combo("Tonemapping", reinterpret_cast<i32*>(&renderer->mode),
+                "None\0Aces\0Filmic\0Lottes\0Reinhard\0Reinhard2\0Uchimura\0Uncharted2\0Unreal");
         }
 
         imgui.EndFrame();

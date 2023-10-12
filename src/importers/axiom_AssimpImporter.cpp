@@ -1,5 +1,7 @@
 #include "axiom_Importer.hpp"
 
+#include <attributes/axiom_Attributes.hpp>
+
 #include <nova/core/nova_Math.hpp>
 
 #include <assimp/Importer.hpp>
@@ -40,10 +42,8 @@ namespace axiom
 
     struct AssimpImporterImpl
     {
-        AssimpImporter& importer;
-
-        ImportSettings settings;
-
+        AssimpImporter&        importer;
+        ImportSettings         settings;
         std::filesystem::path   baseDir;
         Assimp::Importer assimpImporter;
         const aiScene*            asset = nullptr;
@@ -52,20 +52,8 @@ namespace axiom
         std::vector<nova::Ref<UVMaterial>>  materials;
 
         nova::HashMap<std::filesystem::path, nova::Ref<UVTexture>> textures;
-
-        nova::HashMap<UVTexture*, TextureOperations> textureOperations;
-
-        struct ShadingAttribUnpacked
-        {
-            Vec3    normal;
-            Vec2 texCoords;
-            Vec4   tangent;
-        };
-
-        std::vector<ShadingAttribUnpacked> shadingAttribs;
-        std::vector<f32>                      summedAreas;
-
-        nova::HashMap<u32, nova::Ref<UVTexture>> singlePixelTextures;
+        nova::HashMap<UVTexture*, TextureOperations>      textureOperations;
+        nova::HashMap<u32, nova::Ref<UVTexture>>        singlePixelTextures;
 
 #ifdef AXIOM_TRACE_IMPORT // ---------------------------------------------------
         u32 debugLongestNodeName;
@@ -162,17 +150,10 @@ namespace axiom
             return;
         }
 
-        if (mesh->mPrimitiveTypes != aiPrimitiveType_TRIANGLE) {
-            NOVA_LOG("Mesh [{}] contains non-triangle primitives, skipping", mesh->mName.C_Str());
-            return;
-        }
-
         importer.scene->meshes.emplace_back(outMesh);
-        outMesh->positionAttribs.resize(vertexCount);
-        outMesh->shadingAttribs.resize(vertexCount);
+        outMesh->positionAttributes.resize(vertexCount);
+        outMesh->shadingAttributes.resize(vertexCount);
         outMesh->indices.resize(indexCount);
-
-        shadingAttribs.resize(vertexCount);
 
         auto& subMesh = outMesh->subMeshes.emplace_back();
         subMesh.vertexOffset = 0;
@@ -194,150 +175,20 @@ namespace axiom
         // Positions
         for (u32 i = 0; i < mesh->mNumVertices; ++i) {
             auto& pos = mesh->mVertices[i];
-            outMesh->positionAttribs[i] = Vec3(pos.x, pos.y, pos.z);
+            outMesh->positionAttributes[i] = Vec3(pos.x, pos.y, pos.z);
         }
 
-        // Tangent space
-        bool missingNormalsOrTangents = false;
-        if (mesh->HasNormals() && mesh->HasTangentsAndBitangents()) {
-            for (u32 i = 0; i < mesh->mNumVertices; ++i) {
-                auto& _nrm = mesh->mNormals[i];
-                Vec3 nrm{ _nrm.x, _nrm.y, _nrm.z };
-                shadingAttribs[i].normal = Vec3(nrm.x, nrm.y, nrm.x);
-
-                auto& _tgt = mesh->mTangents[i];
-                Vec3 tgt{ _tgt.x, _tgt.y, _tgt.z };
-
-                auto& _btgt = mesh->mBitangents[i];
-                Vec3 btgt{ _btgt.x, _btgt.y, _btgt.z };
-
-                auto sign = glm::dot(btgt, glm::cross(tgt, nrm)) > 0.f ? 1.f : 0.f;
-
-                shadingAttribs[i].tangent = Vec4(tgt.x, tgt.y, tgt.z, sign);
-            }
-        } else {
-            missingNormalsOrTangents = true;
-        }
-
-        // TexCoords (1)
-        if (mesh->HasTextureCoords(0)) {
-            for (u32 i = 0; i < mesh->mNumVertices; ++i) {
-                auto& uv = mesh->mTextureCoords[0][i];
-                outMesh->shadingAttribs[i].texCoords = glm::packHalf2x16(Vec2(uv.x, uv.y));
-                shadingAttribs[i].texCoords = Vec2(uv.x, uv.y);
-            }
-        }
-
-        if (missingNormalsOrTangents || settings.genTBN)
-        {
-#ifdef AXIOM_TRACE_IMPORT // ---------------------------------------------------
-            NOVA_LOG("      Regenerating tangent space: {}", missingNormalsOrTangents ? "missing" : "forced");
-#endif // ----------------------------------------------------------------------
-
-            summedAreas.resize(shadingAttribs.size());
-
-            for (auto& ts : shadingAttribs) {
-                ts.normal  = Vec3(0.f);
-                ts.tangent = Vec4(0.f);
-            }
-
-            auto updateNormalTangent = [&](u32 i, Vec3 normal, Vec4 tangent, f32 area) {
-                f32 lastArea = summedAreas[i];
-                summedAreas[i] += area;
-
-                f32 lastWeight = lastArea / (lastArea + area);
-                f32 newWeight = 1.f - lastWeight;
-
-                auto& v = shadingAttribs[i];
-                v.normal = (lastWeight * v.normal) + (newWeight * normal);
-
-                // Signed tangents
-
-                f32 tl = glm::length(tangent);
-                if (tl == 0.f || glm::isnan(tl) || glm::isinf(tl))
-                {
-                    auto T = glm::normalize(Vec3(1.f, 2.f, 3.f));
-                    tangent = Vec4(glm::normalize(T - glm::dot(T, normal) * normal), tangent.w);
-                }
-
-                v.tangent = Vec4((lastWeight * Vec3(v.tangent)) + (newWeight * Vec3(tangent)), tangent.w);
-            };
-
-            // std::vector<bool> keepPrim(indices.count / 3);
-
-            for (u32 i = 0; i < indexCount; i += 3)
-            {
-                u32 v1i = outMesh->indices[i + 0];
-                u32 v2i = outMesh->indices[i + 1];
-                u32 v3i = outMesh->indices[i + 2];
-
-
-                auto& v1 = outMesh->positionAttribs[v1i];
-                auto& v2 = outMesh->positionAttribs[v2i];
-                auto& v3 = outMesh->positionAttribs[v3i];
-
-                auto v12 = v2 - v1;
-                auto v13 = v3 - v1;
-
-                auto& sa1 = shadingAttribs[v1i];
-                auto& sa2 = shadingAttribs[v2i];
-                auto& sa3 = shadingAttribs[v3i];
-
-                auto u12 = sa2.texCoords - sa1.texCoords;
-                auto u13 = sa3.texCoords - sa1.texCoords;
-
-                f32 f = 1.f / (u12.x * u13.y - u13.x * u12.y);
-                Vec3 T = f * Vec3 {
-                    u13.y * v12.x - u12.y * v13.x,
-                    u13.y * v12.y - u12.y * v13.y,
-                    u13.y * v12.z - u12.y * v13.z,
-                };
-
-                Vec3 bitangent = f * Vec3 {
-                    u13.x * v12.x - u12.x * v13.x,
-                    u13.x * v12.y - u12.x * v13.y,
-                    u13.x * v12.z - u12.x * v13.z,
-                };
-
-                auto cross = glm::cross(v12, v13);
-                auto area = glm::length(0.5f * cross);
-                auto normal = glm::normalize(cross);
-
-                Vec4 tangent = glm::dot(glm::cross(normal, T), bitangent) >= 0.f
-                    ? Vec4(T, 1.f)
-                    : Vec4(T, 0.f);
-
-                if (area)
-                {
-                    // keepPrim[(i - indexOffset) / 3] = true;
-
-                    updateNormalTangent(v1i, normal, tangent, area);
-                    updateNormalTangent(v2i, normal, tangent, area);
-                    updateNormalTangent(v3i, normal, tangent, area);
-                }
-            }
-
-            {
-                // TODO: Filter primitives
-
-                for (u32 i = 0; i < shadingAttribs.size(); ++i) {
-                    auto& saUnpacked = shadingAttribs[i];
-                    saUnpacked.normal = glm::normalize(saUnpacked.normal);
-
-                    auto& saPacked = outMesh->shadingAttribs[i];
-
-                    auto encNormal = math::SignedOctEncode(saUnpacked.normal);
-                    // auto encNormal = math::SignedOctEncode(Vec3(saUnpacked.tangent));
-                    saPacked.octX = u32(encNormal.x * 1023.0);
-                    saPacked.octY = u32(encNormal.y * 1023.0);
-                    saPacked.octS = u32(encNormal.z);
-
-                    auto encTangent = math::EncodeTangent(saUnpacked.normal, saUnpacked.tangent);
-                    saPacked.tgtA = u32(encTangent * 1023.0);
-                    saPacked.tgtS = u32(saUnpacked.tangent.w);
-                }
-            }
-        }
+        s_MeshProcessor.ProcessMesh(
+            { &mesh->mVertices[0], sizeof(mesh->mVertices[0]), vertexCount },
+            mesh->HasNormals()
+                ? InStridedRegion{ &mesh->mNormals[0], sizeof(mesh->mNormals[0]), vertexCount }
+                : InStridedRegion{},
+            mesh->HasTextureCoords(0)
+                ? InStridedRegion{ &mesh->mTextureCoords[0][0], sizeof(mesh->mTextureCoords[0][0]), vertexCount }
+                : InStridedRegion{},
+            { outMesh->indices.data(), sizeof(u32), outMesh->indices.size() },
+            { &outMesh->shadingAttributes[0].tangentSpace, sizeof(outMesh->shadingAttributes[0]), vertexCount },
+            { &outMesh->shadingAttributes[0].texCoords, sizeof(outMesh->shadingAttributes[0]), vertexCount });
     }
 
     void AssimpImporterImpl::ProcessTextures()
@@ -735,6 +586,9 @@ namespace axiom
         transform = parentTransform * transform;
 
         for (u32 i = 0; i < node->mNumMeshes; ++i) {
+            if (meshes[node->mMeshes[i]]->indices.empty())
+                continue;
+
 #ifdef AXIOM_TRACE_IMPORT // ---------------------------------------------------
             NOVA_LOG("  - Mesh Instance: {:>{}} -> {}",
                 node->mName.C_Str(),

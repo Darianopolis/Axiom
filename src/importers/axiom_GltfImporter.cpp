@@ -42,15 +42,12 @@ namespace axiom
         std::vector<nova::Ref<UVTexture>>   textures;
         std::vector<nova::Ref<UVMaterial>> materials;
 
-        struct ShadingAttribUnpacked
+        struct Vertex
         {
-            Vec3    normal;
+            Vec3 normal;
             Vec2 texCoords;
-            Vec4   tangent;
         };
-
-        std::vector<ShadingAttribUnpacked> shadingAttribs;
-        std::vector<f32>                      summedAreas;
+        std::vector<Vertex> vertices;
 
         nova::HashMap<u32, u32> singlePixelTextures;
 
@@ -200,8 +197,8 @@ namespace axiom
         auto outMesh = nova::Ref<TriMesh>::Create();
         importer.scene->meshes.emplace_back(outMesh);
         meshes.emplace_back(outMesh);
-        outMesh->positionAttribs.resize(vertexCount);
-        outMesh->shadingAttribs.resize(vertexCount);
+        outMesh->positionAttributes.resize(vertexCount);
+        outMesh->shadingAttributes.resize(vertexCount);
         outMesh->indices.resize(indexCount);
         outMesh->subMeshes.reserve(primitives.size());
 
@@ -225,151 +222,39 @@ namespace axiom
             auto& positions = asset->accessors[prim->findAttribute("POSITION")->second];
             fastgltf::iterateAccessorWithIndex<Vec3>(*asset,
                 positions, [&](Vec3 pos, usz index) {
-                    outMesh->positionAttribs[vertexOffset + index] = pos;
+                    outMesh->positionAttributes[vertexOffset + index] = pos;
                 });
 
             subMesh.maxVertex = u32(positions.count - 1);
             subMesh.indexCount = u32(indices.count);
 
-            shadingAttribs.resize(positions.count);
+            vertices.resize(vertexCount);
 
-            bool missingNormalsOrTangents = false;
-
-            // Normals
+            bool hasNormals = false;
             if (auto normals = prim->findAttribute("NORMAL"); normals != prim->attributes.end()) {
-                auto& accessor = asset->accessors[normals->second];
-                fastgltf::iterateAccessorWithIndex<Vec3>(*asset,
-                    accessor, [&](Vec3 normal, usz index) {
-                        shadingAttribs[index].normal = normal;
-                    });
-            } else {
-                missingNormalsOrTangents = true;
+                hasNormals = true;
+                fastgltf::iterateAccessorWithIndex<Vec3>(*asset, asset->accessors[normals->second],
+                    [&](Vec3 nrm, usz i) { vertices[i].normal = nrm; });
             }
 
-            // Tangents
-            if (auto tangents = prim->findAttribute("TANGENT"); tangents != prim->attributes.end()) {
-                fastgltf::iterateAccessorWithIndex<Vec4>(*asset,
-                    asset->accessors[tangents->second], [&](Vec4 tangent, usz index) {
-                        shadingAttribs[index].tangent = tangent;
-                    });
-            } else {
-                missingNormalsOrTangents = true;
-            }
-
-            // TexCoords (1)
+            bool hasTexCoords = false;
             if (auto texCoords = prim->findAttribute("TEXCOORD_0"); texCoords != prim->attributes.end()) {
-                fastgltf::iterateAccessorWithIndex<Vec2>(*asset,
-                    asset->accessors[texCoords->second], [&](Vec2 texCoords, usz index) {
-                        shadingAttribs[index].texCoords = texCoords;
-                        outMesh->shadingAttribs[vertexOffset + index].texCoords
-                            = glm::packHalf2x16(texCoords);
-                    });
+                hasTexCoords = true;
+                fastgltf::iterateAccessorWithIndex<Vec2>(*asset, asset->accessors[texCoords->second],
+                    [&](Vec2 uv, usz i) { vertices[i].texCoords = uv; });
             }
 
-            if (missingNormalsOrTangents || settings.genTBN)
-            {
-                summedAreas.resize(shadingAttribs.size());
-
-                for (auto& ts : shadingAttribs) {
-                    ts.normal  = Vec3(0.f);
-                    ts.tangent = Vec4(0.f);
-                }
-
-                auto updateNormalTangent = [&](u32 i, Vec3 normal, Vec4 tangent, f32 area) {
-                    f32 lastArea = summedAreas[i];
-                    summedAreas[i] += area;
-
-                    f32 lastWeight = lastArea / (lastArea + area);
-                    f32 newWeight = 1.f - lastWeight;
-
-                    auto& v = shadingAttribs[i];
-                    v.normal = (lastWeight * v.normal) + (newWeight * normal);
-
-                    // Signed tangents
-
-                    f32 tl = glm::length(tangent);
-                    if (tl == 0.f || glm::isnan(tl) || glm::isinf(tl))
-                    {
-                        auto T = glm::normalize(Vec3(1.f, 2.f, 3.f));
-                        tangent = Vec4(glm::normalize(T - glm::dot(T, normal) * normal), tangent.w);
-                    }
-
-                    v.tangent = Vec4((lastWeight * Vec3(v.tangent)) + (newWeight * Vec3(tangent)), tangent.w);
-                };
-
-                // std::vector<bool> keepPrim(indices.count / 3);
-
-                for (u32 i = u32(indexOffset); i < indexOffset + indices.count; i += 3)
-                {
-                    u32 v1i = outMesh->indices[i + 0];
-                    u32 v2i = outMesh->indices[i + 1];
-                    u32 v3i = outMesh->indices[i + 2];
-
-                    auto& v1 = outMesh->positionAttribs[v1i + vertexOffset];
-                    auto& v2 = outMesh->positionAttribs[v2i + vertexOffset];
-                    auto& v3 = outMesh->positionAttribs[v3i + vertexOffset];
-
-                    auto v12 = v2 - v1;
-                    auto v13 = v3 - v1;
-
-                    auto& sa1 = shadingAttribs[v1i];
-                    auto& sa2 = shadingAttribs[v2i];
-                    auto& sa3 = shadingAttribs[v3i];
-
-                    auto u12 = sa2.texCoords - sa1.texCoords;
-                    auto u13 = sa3.texCoords - sa1.texCoords;
-
-                    f32 f = 1.f / (u12.x * u13.y - u13.x * u12.y);
-                    Vec3 T = f * Vec3 {
-                        u13.y * v12.x - u12.y * v13.x,
-                        u13.y * v12.y - u12.y * v13.y,
-                        u13.y * v12.z - u12.y * v13.z,
-                    };
-
-                    Vec3 bitangent = f * Vec3 {
-                        u13.x * v12.x - u12.x * v13.x,
-                        u13.x * v12.y - u12.x * v13.y,
-                        u13.x * v12.z - u12.x * v13.z,
-                    };
-
-                    auto cross = glm::cross(v12, v13);
-                    auto area = glm::length(0.5f * cross);
-                    auto normal = glm::normalize(cross);
-
-                    Vec4 tangent = glm::dot(glm::cross(normal, T), bitangent) >= 0.f
-                        ? Vec4(T, 1.f)
-                        : Vec4(T, 0.f);
-
-                    if (area)
-                    {
-                        // keepPrim[(i - indexOffset) / 3] = true;
-
-                        updateNormalTangent(v1i, normal, tangent, area);
-                        updateNormalTangent(v2i, normal, tangent, area);
-                        updateNormalTangent(v3i, normal, tangent, area);
-                    }
-                }
-            }
-
-            {
-                // TODO: Filter primitives
-
-                for (u32 i = 0; i < shadingAttribs.size(); ++i) {
-                    auto& saUnpacked = shadingAttribs[i];
-                    saUnpacked.normal = glm::normalize(saUnpacked.normal);
-
-                    auto& saPacked = outMesh->shadingAttribs[vertexOffset + i];
-
-                    auto encNormal = math::SignedOctEncode(saUnpacked.normal);
-                    saPacked.octX = u32(encNormal.x * 1023.0);
-                    saPacked.octY = u32(encNormal.y * 1023.0);
-                    saPacked.octS = u32(encNormal.z);
-
-                    auto encTangent = math::EncodeTangent(saUnpacked.normal, saUnpacked.tangent);
-                    saPacked.tgtA = u32(encTangent * 1023.0);
-                    saPacked.tgtS = u32(saUnpacked.tangent.w);
-                }
-            }
+            s_MeshProcessor.ProcessMesh(
+                { &outMesh->positionAttributes[vertexOffset], sizeof(outMesh->positionAttributes[0]), positions.count },
+                hasNormals
+                    ? InStridedRegion{ &vertices[0].normal, sizeof(vertices[0]), positions.count }
+                    : InStridedRegion{},
+                hasTexCoords
+                    ? InStridedRegion{ &vertices[0].texCoords, sizeof(vertices[0]), positions.count }
+                    : InStridedRegion{},
+                { &outMesh->indices[indexOffset], sizeof(outMesh->indices[0]), indices.count },
+                { &outMesh->shadingAttributes[0].tangentSpace, sizeof(outMesh->shadingAttributes[0]), positions.count },
+                { &outMesh->shadingAttributes[0].texCoords, sizeof(outMesh->shadingAttributes[0]), positions.count });
 
             vertexOffset += positions.count;
             indexOffset += indices.count;
@@ -439,7 +324,6 @@ namespace axiom
             }, gltfImage.data);
 
             if (imageData) {
-                // constexpr u32 MaxSize = 1024;
                 constexpr u32 MaxSize = 4096;
 
                 if (width > MaxSize || height > MaxSize) {

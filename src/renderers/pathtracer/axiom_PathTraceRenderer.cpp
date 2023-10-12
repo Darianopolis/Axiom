@@ -45,9 +45,9 @@ namespace axiom
 
     struct GPU_GeometryInfo
     {
-        u64 shadingAttribs;
-        u64        indices;
-        u64       material;
+        u64 shadingAttributes;
+        u64           indices;
+        u64          material;
     };
 
     struct PathTraceRenderer : Renderer
@@ -71,7 +71,7 @@ namespace axiom
         nova::HashMap<void*, u64>        materialAddresses;
         nova::HashMap<void*, LoadedTexture> loadedTextures;
 
-        nova::Buffer            shadingAttribBuffer;
+        nova::Buffer        shadingAttributesBuffer;
         nova::Buffer                    indexBuffer;
         nova::Buffer             geometryInfoBuffer;
         nova::Buffer             instanceDataBuffer;
@@ -106,6 +106,7 @@ namespace axiom
 
         virtual void SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov);
         virtual void Record(nova::CommandList cmd, nova::Texture target, u32 targetIdx);
+        virtual void ResetSamples();
     };
 
     nova::Ref<Renderer> CreatePathTraceRenderer(nova::Context context, nova::DescriptorHeap heap, nova::IndexFreeList* heapSlots)
@@ -139,7 +140,7 @@ namespace axiom
 
     PathTraceRenderer::~PathTraceRenderer()
     {
-        shadingAttribBuffer.Destroy();
+        shadingAttributesBuffer.Destroy();
         indexBuffer.Destroy();
         tlasInstanceBuffer.Destroy();
         geometryInfoBuffer.Destroy();
@@ -185,7 +186,6 @@ namespace axiom
             auto& loadedTexture = loadedTextures.at(texture.Raw());
 
             if (texture->size.x < 4 || texture->size.y < 4 || NoBc7) {
-                NOVA_LOG("Loading ({} x {}) texture directly", texture->size.x, texture->size.y);
                 loadedTexture.texture = nova::Texture::Create(context,
                     Vec3U(texture->size, 0),
                     nova::TextureUsage::Sampled,
@@ -295,8 +295,8 @@ namespace axiom
         u64 maxPerBlasVertexCount = 0;
         u64 indexCount = 0;
         for (auto& mesh : scene->meshes) {
-            maxPerBlasVertexCount = std::max(maxPerBlasVertexCount, mesh->positionAttribs.size());
-            vertexCount += mesh->positionAttribs.size();
+            maxPerBlasVertexCount = std::max(maxPerBlasVertexCount, mesh->positionAttributes.size());
+            vertexCount += mesh->positionAttributes.size();
             indexCount += mesh->indices.size();
         }
 
@@ -304,8 +304,8 @@ namespace axiom
         NOVA_LOG("Compiling, unique vertices = {}, unique indices = {}", vertexCount, indexCount);
 #endif // ----------------------------------------------------------------------
 
-        shadingAttribBuffer = nova::Buffer::Create(context,
-            vertexCount * sizeof(ShadingAttrib),
+        shadingAttributesBuffer = nova::Buffer::Create(context,
+            vertexCount * sizeof(ShadingAttributes),
             nova::BufferUsage::Storage | nova::BufferUsage::AccelBuild,
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
@@ -322,8 +322,8 @@ namespace axiom
         for (auto& mesh : scene->meshes) {
             meshData[mesh.Raw()] = CompiledMesh{ i32(vertexOffset), u32(indexOffset), geometryCount };
 
-            shadingAttribBuffer.Set<ShadingAttrib>(mesh->shadingAttribs, vertexOffset);
-            vertexOffset += mesh->positionAttribs.size();
+            shadingAttributesBuffer.Set<ShadingAttributes>(mesh->shadingAttributes, vertexOffset);
+            vertexOffset += mesh->positionAttributes.size();
 
             indexBuffer.Set<u32>(mesh->indices, indexOffset);
             indexOffset += mesh->indices.size();
@@ -397,7 +397,7 @@ namespace axiom
 
                 // Load position data
 
-                posAttribBuffer.Set<Vec3>(mesh->positionAttribs);
+                posAttribBuffer.Set<Vec3>(mesh->positionAttributes);
                 builder.Prepare(
                     nova::AccelerationStructureType::BottomLevel,
                     nova::AccelerationStructureFlags::AllowDataAccess
@@ -417,7 +417,7 @@ namespace axiom
                     // Store geometry offsets and material
 
                     geometryInfoBuffer.Set<GPU_GeometryInfo>({{
-                        .shadingAttribs = shadingAttribBuffer.GetAddress() + (data.vertexOffset + subMesh.vertexOffset) * sizeof(ShadingAttrib),
+                        .shadingAttributes = shadingAttributesBuffer.GetAddress() + (data.vertexOffset + subMesh.vertexOffset) * sizeof(ShadingAttributes),
                         .indices =                indexBuffer.GetAddress() + (data.firstIndex   + subMesh.firstIndex  ) * sizeof(u32),
                         .material = materialAddresses.at(subMesh.material.Raw()),
                     }}, geometryIndex);
@@ -488,7 +488,7 @@ namespace axiom
             selectedInstanceCount++;
 
 #ifdef AXIOM_TRACE_COMPILE // --------------------------------------------------
-            instancedVertexCount += instance->mesh->positionAttribs.size();
+            instancedVertexCount += instance->mesh->positionAttributes.size();
             instancedIndexCount += instance->mesh->indices.size();
 #endif // ----------------------------------------------------------------------
         }
@@ -557,7 +557,7 @@ namespace axiom
         // Randomness
 
         {
-            u32 noiseLen = size.x + size.y + 8;
+            u32 noiseLen = (size.x + size.y) * 2;
             noiseBuffer.Resize(noiseLen * sizeof(u32));
 
             u32* noise = reinterpret_cast<u32*>(noiseBuffer.GetMapped());
@@ -587,6 +587,8 @@ namespace axiom
             u32 sampleCount;
 
             Vec2 jitter;
+
+            u32 sampleRadius;
         };
 
         // Apply pixel jitter for all non-initial samples
@@ -607,12 +609,12 @@ namespace axiom
             .linearSampler = linearSamplerIdx,
             .sampleCount = sampleCount,
             .jitter = jitter,
+            .sampleRadius = sampleRadius,
         });
 
         sampleCount++;
 
-        constexpr u32 PixelSize = 1;
-        cmd.TraceRays(pipeline, Vec3U(Vec2U(target.GetExtent()) / Vec2U(PixelSize), 1), hitGroups.GetAddress(), 1);
+        cmd.TraceRays(pipeline, Vec3U(Vec2U(target.GetExtent()) / Vec2U(sampleRadius), 1), hitGroups.GetAddress(), 1);
 
         // Post process
 
@@ -621,16 +623,25 @@ namespace axiom
             Vec2U                    size;
             nova::DescriptorHandle source;
             nova::DescriptorHandle target;
+            f32                  exposure;
+            i32                      mode;
         };
 
         cmd.PushConstants(PC_PostProcess {
             .size = Vec2U(target.GetExtent()),
             .source = accumulationTargetIdx,
-            .target = targetIdx
+            .target = targetIdx,
+            .exposure = exposure,
+            .mode = u8(mode),
         });
 
         cmd.BindShaders({ postProcessShader });
         cmd.Barrier(nova::PipelineStage::RayTracing, nova::PipelineStage::Compute);
         cmd.Dispatch(Vec3U((Vec2U(size) + Vec2U(15)) / Vec2U(16), 1));
+    }
+
+    void PathTraceRenderer::ResetSamples()
+    {
+        sampleCount = 0;
     }
 }

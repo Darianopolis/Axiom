@@ -7,9 +7,9 @@ layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer Pos
     vec3 position;
 };
 
-layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer ShadingAttrib {
-    uint tangentSpace_matIndex;
-    uint texCoord;
+layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer ShadingAttributes {
+    axiom_TangentSpace tangentSpace;
+    axiom_TexCoords       texCoords;
 };
 
 layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer Instance {
@@ -17,10 +17,10 @@ layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer Ins
 };
 
 layout(push_constant, scalar) readonly uniform pc_ {
-    PosAttrib         posAttribs;
-    ShadingAttrib shadingAttribs;
-    Instance           instances;
-    mat4                viewProj;
+    PosAttrib                posAttribs;
+    ShadingAttributes shadingAttributes;
+    Instance                  instances;
+    mat4                       viewProj;
 } pc;
 
 layout(location = 0) out vec3 outPosition;
