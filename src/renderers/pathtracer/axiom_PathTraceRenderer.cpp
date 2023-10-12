@@ -175,9 +175,6 @@ namespace axiom
             loadedTextures.insert({ texture.Raw(), {} });
         }
 
-        bc7enc_compress_block_init();
-        constexpr bool NoBc7 = true;
-
         std::atomic_uint64_t totalResidentTextures = 0;
 
 #pragma omp parallel for
@@ -185,42 +182,17 @@ namespace axiom
             auto& texture = scene->textures[i];
             auto& loadedTexture = loadedTextures.at(texture.Raw());
 
-            if (texture->size.x < 4 || texture->size.y < 4 || NoBc7) {
-                loadedTexture.texture = nova::Texture::Create(context,
-                    Vec3U(texture->size, 0),
-                    nova::TextureUsage::Sampled,
-                    nova::Format::RGBA8_UNorm,
-                    {});
+            loadedTexture.texture = nova::Texture::Create(context,
+                Vec3U(texture->size, 0),
+                nova::TextureUsage::Sampled,
+                // nova::Format::RGBA8_UNorm,
+                nova::Format::BC7_Unorm,
+                {});
 
-                loadedTexture.texture.Set({}, loadedTexture.texture.GetExtent(),
-                    texture->data.data());
+            loadedTexture.texture.Set({}, loadedTexture.texture.GetExtent(),
+                texture->data.data());
 
-                totalResidentTextures += texture->data.size();
-            } else {
-                NOVA_LOG("Loading ({} x {}) texture with BC7 compression", texture->size.x, texture->size.y);
-
-                thread_local utils::image_u8 image;
-                image.init(texture->size.x, texture->size.y);
-                std::memcpy(image.get_pixels().data(), texture->data.data(), image.get_pixels().size() * 4);
-
-                rdo_bc::rdo_bc_params params;
-                params.m_bc7enc_reduce_entropy = false;
-                params.m_rdo_multithreading = true;
-
-                thread_local rdo_bc::rdo_bc_encoder encoder;
-                encoder.init(image, params);
-                encoder.encode();
-
-                loadedTexture.texture = nova::Texture::Create(context,
-                    Vec3U(image.width(), image.height(), 0),
-                    nova::TextureUsage::Sampled | nova::TextureUsage::TransferDst,
-                    nova::Format::BC7_Unorm,
-                    {});
-
-                totalResidentTextures += encoder.get_total_blocks_size_in_bytes();
-
-                loadedTexture.texture.Set({}, loadedTexture.texture.GetExtent(), encoder.get_blocks());
-            }
+            totalResidentTextures += texture->data.size();
 
 #pragma omp critical
             {

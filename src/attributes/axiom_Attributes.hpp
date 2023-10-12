@@ -49,6 +49,14 @@ namespace axiom
         Scalar1,
     };
 
+    enum class ImageProcess
+    {
+        None     = 0,
+        FlipNrmZ = 1 << 0,
+        GenMips  = 1 << 1,
+    };
+    NOVA_DECORATE_FLAG_ENUM(ImageProcess)
+
     struct GPU_TangentSpace
     {
         // https://johnwhite3d.blogspot.com/2017/10/signed-octahedron-normal-encoding.html?view=classic
@@ -94,17 +102,24 @@ namespace axiom
         utils::image_u8          image;
         rdo_bc::rdo_bc_encoder encoder;
 
+        f32 minAlpha = 0.f;
+        f32 maxAlpha = 1.f;
+
     public:
         void ProcessImage(
-            const char* path,
-            usz embeddedSize,
-            ImageType   type,
-            i32       maxDim,
-            bool         mip);
+            const char*       path,
+            usz       embeddedSize,
+            ImageType         type,
+            i32             maxDim,
+            ImageProcess processes);
 
         const void* GetImageData();
         usz GetImageDataSize();
+        Vec2U GetImageDimensions();
         nova::Format GetImageFormat();
+
+        f32 GetMinAlpha() { return minAlpha; }
+        f32 GetMaxAlpha() { return maxAlpha; }
     };
 
     inline thread_local ImageProcessor s_ImageProcessor;

@@ -258,14 +258,13 @@ namespace axiom
 // -----------------------------------------------------------------------------
 
     void ImageProcessor::ProcessImage(
-        const char* path,
-        usz embeddedSize,
-        ImageType   type,
-        i32       maxDim,
-        bool         mip)
+        const char*       path,
+        usz       embeddedSize,
+        ImageType         type,
+        i32             maxDim,
+        ImageProcess processes)
     {
         (void)type;
-        (void)mip;
 
         i32 width, height, channels;
         stbi_uc* data = nullptr;
@@ -282,6 +281,10 @@ namespace axiom
             NOVA_THROW("File not loaded!");
         }
 
+        auto getIndex = [](i32 x, i32 y, i32 pitch) {
+            return x + y * pitch;
+        };
+
         if (width > maxDim || height > maxDim) {
             i32 uWidth = width;
             i32 uHeight = height;
@@ -289,10 +292,6 @@ namespace axiom
             i32 sWidth = uWidth / factor;
             i32 sHeight = uHeight / factor;
             i32 factor2 = factor * factor;
-
-            auto getIndex = [](i32 x, i32 y, i32 pitch) {
-                return x + y * pitch;
-            };
 
             image.init(sWidth, sHeight);
             for (i32 x = 0; x < sWidth; ++x) {
@@ -315,6 +314,9 @@ namespace axiom
                         = { u8(acc.r), u8(acc.g), u8(acc.b), u8(acc.a) };
                 }
             }
+
+            width = sWidth;
+            height = sHeight;
         } else {
 
             image.init(width, height);
@@ -322,6 +324,30 @@ namespace axiom
         }
 
         stbi_image_free(data);
+
+        minAlpha = 1.f;
+        maxAlpha = 0.f;
+
+        if (type == ImageType::ColorAlpha) {
+            // Find alpha values
+            for (i32 x = 0; x < width; ++x) {
+                for (i32 y = 0; y < height; ++y) {
+                    auto& pixel = image.get_pixels()[getIndex(x, y, width)];
+                    f32 alpha = f32(pixel[3]) / 255.f;
+                    minAlpha = std::min(alpha, minAlpha);
+                    maxAlpha = std::max(alpha, maxAlpha);
+                }
+            }
+        }
+
+        if (processes >= ImageProcess::FlipNrmZ) {
+            for (i32 x = 0; x < width; ++x) {
+                for (i32 y = 0; y < height; ++y) {
+                    auto& pixel = image.get_pixels()[getIndex(x, y, width)];
+                    pixel[2] = u8(255 - pixel[2]);
+                }
+            }
+        }
 
         rdo_bc::rdo_bc_params params;
         params.m_bc7enc_reduce_entropy = true;
@@ -334,11 +360,18 @@ namespace axiom
     const void* ImageProcessor::GetImageData()
     {
         return encoder.get_blocks();
+        // return image.get_pixels().data();
     }
 
     usz ImageProcessor::GetImageDataSize()
     {
         return encoder.get_total_blocks_size_in_bytes();
+        // return image.width() * image.height() * 4;
+    }
+
+    Vec2U ImageProcessor::GetImageDimensions()
+    {
+        return{ image.width(), image.height() };
     }
 
     nova::Format ImageProcessor::GetImageFormat()

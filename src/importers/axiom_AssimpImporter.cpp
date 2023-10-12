@@ -32,14 +32,6 @@ namespace axiom
         : scene(&_scene)
     {}
 
-    enum class TextureOperations
-    {
-        None        = 0,
-        FlipNormalZ = 1 << 0,
-        ScanAlpha   = 1 << 1,
-    };
-    NOVA_DECORATE_FLAG_ENUM(TextureOperations)
-
     struct AssimpImporterImpl
     {
         AssimpImporter&        importer;
@@ -52,7 +44,7 @@ namespace axiom
         std::vector<nova::Ref<UVMaterial>>  materials;
 
         nova::HashMap<std::filesystem::path, nova::Ref<UVTexture>> textures;
-        nova::HashMap<UVTexture*, TextureOperations>      textureOperations;
+        nova::HashMap<UVTexture*, ImageProcess>           textureOperations;
         nova::HashMap<u32, nova::Ref<UVTexture>>        singlePixelTextures;
 
 #ifdef AXIOM_TRACE_IMPORT // ---------------------------------------------------
@@ -222,103 +214,23 @@ namespace axiom
 
     void AssimpImporterImpl::ProcessTexture(UVTexture* outTexture, const std::filesystem::path& texture)
     {
-        {
-            int width, height, channels;
-            stbi_uc* imageData = nullptr;
+        auto path = std::format("{}/{}", baseDir.string(), texture.string());
 
-            auto path = std::format("{}/{}", baseDir.string(), texture.string());
 #ifdef AXIOM_TRACE_IMPORT // ---------------------------------------------------
             NOVA_LOG("  Texture[{}]", path);
 #endif // ----------------------------------------------------------------------
-            imageData = stbi_load(
-                path.c_str(),
-                &width, &height, &channels, STBI_rgb_alpha);
-            if (!imageData)
-                NOVA_LOG("    STB Failed to load image: {}", path);
 
-            if (imageData) {
-                // constexpr u32 MaxSize = 1024;
-                constexpr u32 MaxSize = 4096;
+        auto _ops = textureOperations.find(outTexture);
+        auto ops = _ops == textureOperations.end()
+            ? ImageProcess::None
+            : _ops->second;
 
-                if (width > MaxSize || height > MaxSize) {
-                    u32 uWidth = u32(width);
-                    u32 uHeight = u32(height);
-                    u32 factor = std::max(width / MaxSize, height / MaxSize);
-                    u32 sWidth = uWidth / factor;
-                    u32 sHeight = uHeight / factor;
-                    u32 factor2 = factor * factor;
-                    auto getIndex = [](u32 x, u32 y, u32 pitch) {
-                        return x + y * pitch;
-                    };
-
-                    outTexture->data.resize(sWidth * sHeight * 4);
-                    outTexture->size = Vec2U(sWidth, sHeight);
-                    for (u32 x = 0; x < sWidth; ++x) {
-                        for (u32 y = 0; y < sHeight; ++y) {
-                            u32 r = 0, g = 0, b = 0, a = 0;
-                            for (u32 dx = 0; dx < factor; ++dx) {
-                                for (u32 dy = 0; dy < factor; ++dy) {
-                                    auto* pixel = imageData + getIndex(x * factor + dx, y * factor + dy, uWidth) * 4;
-                                    r += pixel[0];
-                                    g += pixel[1];
-                                    b += pixel[2];
-                                    a += pixel[3];
-                                }
-                            }
-
-                            auto* pixel = outTexture->data.data() + getIndex(x, y, sWidth) * 4;
-                            pixel[0] = b8(r / factor2);
-                            pixel[1] = b8(g / factor2);
-                            pixel[2] = b8(b / factor2);
-                            pixel[3] = b8(a / factor2);
-                        }
-                    }
-                } else {
-                    auto pData = reinterpret_cast<const std::byte*>(imageData);
-                    outTexture->data.assign(pData, pData + (width * height * 4));
-                    outTexture->size = Vec2U(u32(width), u32(height));
-                }
-
-                auto _ops = textureOperations.find(outTexture);
-                auto ops = _ops == textureOperations.end()
-                    ? TextureOperations::None
-                    : _ops->second;
-
-                if (ops >= TextureOperations::ScanAlpha) {
-                    // Find alpha values
-                    for (i32 x = 0; x < width; ++x) {
-                        for (i32 y = 0; y < height; ++y) {
-                            u32 index = ((x * width) + y) * 4;
-                            auto* pixel = outTexture->data.data() + index;
-                            f32 alpha = f32(pixel[3]) / 255.f;
-                            outTexture->minAlpha = std::min(alpha, outTexture->minAlpha);
-                            outTexture->maxAlpha = std::max(alpha, outTexture->maxAlpha);
-                        }
-                    }
-                }
-
-                if (ops >= TextureOperations::FlipNormalZ) {
-                    for (i32 x = 0; x < width; ++x) {
-                        for (i32 y = 0; y < height; ++y) {
-                            u32 index = ((x * width) + y) * 4;
-                            auto* pixel = outTexture->data.data() + index;
-                            pixel[2] = b8(255 - u8(pixel[2]));
-                        }
-                    }
-                }
-
-                stbi_image_free(imageData);
-            }
-        }
-
-        if (outTexture->data.empty()) {
-            outTexture->data.resize(4);
-            outTexture->data[0] = b8(255);
-            outTexture->data[1] = b8(255);
-            outTexture->data[2] = b8(255);
-            outTexture->data[3] = b8(255);
-            outTexture->size = Vec2U(1, 1);
-        }
+        s_ImageProcessor.ProcessImage(path.c_str(), 0, ImageType::ColorAlpha, 4096, ops);
+        outTexture->data.resize(s_ImageProcessor.GetImageDataSize());
+        std::memcpy(outTexture->data.data(), s_ImageProcessor.GetImageData(), outTexture->data.size());
+        outTexture->size = s_ImageProcessor.GetImageDimensions();
+        outTexture->minAlpha = s_ImageProcessor.GetMinAlpha();
+        outTexture->maxAlpha = s_ImageProcessor.GetMaxAlpha();
     }
 
     void AssimpImporterImpl::ProcessMaterials()
@@ -499,12 +411,11 @@ namespace axiom
         } else {
             outMaterial->baseColor_alpha = makePixelImage({ 1.f, 1.f, 1.f });
         }
-        textureOperations[outMaterial->baseColor_alpha] |= TextureOperations::ScanAlpha;
 
         if (auto tex = findImage({ aiTextureType_NORMALS })) {
             outMaterial->normals = tex.value();
             if (settings.flipNormalMapZ) {
-                textureOperations[outMaterial->normals] |= TextureOperations::FlipNormalZ;
+                textureOperations[outMaterial->normals] |= ImageProcess::FlipNrmZ;
             }
         } else {
             outMaterial->normals = makePixelImage({ 0.5f, 0.5f, 1.f });

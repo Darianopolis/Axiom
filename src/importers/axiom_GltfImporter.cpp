@@ -253,8 +253,8 @@ namespace axiom
                     ? InStridedRegion{ &vertices[0].texCoords, sizeof(vertices[0]), positions.count }
                     : InStridedRegion{},
                 { &outMesh->indices[indexOffset], sizeof(outMesh->indices[0]), indices.count },
-                { &outMesh->shadingAttributes[0].tangentSpace, sizeof(outMesh->shadingAttributes[0]), positions.count },
-                { &outMesh->shadingAttributes[0].texCoords, sizeof(outMesh->shadingAttributes[0]), positions.count });
+                { &outMesh->shadingAttributes[vertexOffset].tangentSpace, sizeof(outMesh->shadingAttributes[0]), positions.count },
+                { &outMesh->shadingAttributes[vertexOffset].texCoords, sizeof(outMesh->shadingAttributes[0]), positions.count });
 
             vertexOffset += positions.count;
             indexOffset += indices.count;
@@ -281,102 +281,39 @@ namespace axiom
         auto outTexture = nova::Ref<UVTexture>::Create();
         textures[index] = outTexture;
 
-        if (texture.imageIndex) {
-            int width, height, channels;
-            stbi_uc* imageData = nullptr;
+        constexpr u32 MaxDim = 4096;
 
-            auto& gltfImage = asset->images[texture.imageIndex.value()];
-
-            std::visit(nova::Overloads {
-                [&](fastgltf::sources::URI& uri) {
-                    auto path = std::format("{}/{}", baseDir.string(), uri.uri.path());
+        auto& gltfImage = asset->images[texture.imageIndex.value()];
+        std::visit(nova::Overloads {
+            [&](fastgltf::sources::URI& uri) {
+                auto path = std::format("{}/{}", baseDir.string(), uri.uri.path());
 #ifdef AXIOM_TRACE_IMPORT // ---------------------------------------------------
-                    NOVA_LOG("  Texture[{}] = File[{}]", index, path);
+                NOVA_LOG("  Texture[{}] = File[{}]", index, path);
 #endif // ----------------------------------------------------------------------
-                    imageData = stbi_load(
-                        path.c_str(),
-                        &width, &height, &channels, STBI_rgb_alpha);
-                    if (!imageData)
-                        NOVA_LOG("STB Failed to load image: {}", path);
-                },
-                [&](fastgltf::sources::Vector& vec) {
-                    imageData = stbi_load_from_memory(
-                        vec.bytes.data(), u32(vec.bytes.size()),
-                        &width, &height, &channels, STBI_rgb_alpha);
-                },
-                [&](fastgltf::sources::ByteView& byteView) {
-                    imageData = stbi_load_from_memory(
-                        reinterpret_cast<const unsigned char*>(byteView.bytes.data()), u32(byteView.bytes.size()),
-                        &width, &height, &channels, STBI_rgb_alpha);
-                },
-                [&](fastgltf::sources::BufferView& bufferViewIdx) {
-                    auto& view = asset->bufferViews[bufferViewIdx.bufferViewIndex];
-                    auto& buffer = asset->buffers[view.bufferIndex];
-                    auto* bytes = fastgltf::DefaultBufferDataAdapter{}(buffer) + view.byteOffset;
+                s_ImageProcessor.ProcessImage(path.c_str(), 0, ImageType::ColorAlpha, MaxDim, {});
+            },
+            [&](fastgltf::sources::Vector& vec) {
+                s_ImageProcessor.ProcessImage((const char*)vec.bytes.data(), vec.bytes.size(), ImageType::ColorAlpha, MaxDim, {});
+            },
+            [&](fastgltf::sources::ByteView& byteView) {
+                s_ImageProcessor.ProcessImage((const char*)byteView.bytes.data(), byteView.bytes.size(), ImageType::ColorAlpha, MaxDim, {});
+            },
+            [&](fastgltf::sources::BufferView& bufferViewIdx) {
+                auto& view = asset->bufferViews[bufferViewIdx.bufferViewIndex];
+                auto& buffer = asset->buffers[view.bufferIndex];
+                auto* bytes = fastgltf::DefaultBufferDataAdapter{}(buffer) + view.byteOffset;
+                s_ImageProcessor.ProcessImage((const char*)bytes, view.byteLength, ImageType::ColorAlpha, MaxDim, {});
+            },
+            [&](auto&) {
+                NOVA_THROW("Unknown image source: {}", gltfImage.data.index());
+            },
+        }, gltfImage.data);
 
-                    imageData = stbi_load_from_memory(
-                        reinterpret_cast<const unsigned char*>(bytes), i32(view.byteLength),
-                        &width, &height, &channels, STBI_rgb_alpha);
-                },
-                [&](auto&) {
-                    NOVA_THROW("Unknown image source: {}", gltfImage.data.index());
-                },
-            }, gltfImage.data);
-
-            if (imageData) {
-                constexpr u32 MaxSize = 4096;
-
-                if (width > MaxSize || height > MaxSize) {
-                    u32 uWidth = u32(width);
-                    u32 uHeight = u32(height);
-                    u32 factor = std::max(width / MaxSize, height / MaxSize);
-                    u32 sWidth = uWidth / factor;
-                    u32 sHeight = uHeight / factor;
-                    u32 factor2 = factor * factor;
-                    auto getIndex = [](u32 x, u32 y, u32 pitch) {
-                        return x + y * pitch;
-                    };
-
-                    outTexture->data.resize(sWidth * sHeight * 4);
-                    outTexture->size = Vec2U(sWidth, sHeight);
-                    for (u32 x = 0; x < sWidth; ++x) {
-                        for (u32 y = 0; y < sHeight; ++y) {
-                            u32 r = 0, g = 0, b = 0, a = 0;
-                            for (u32 dx = 0; dx < factor; ++dx) {
-                                for (u32 dy = 0; dy < factor; ++dy) {
-                                    auto* pixel = imageData + getIndex(x * factor + dx, y * factor + dy, uWidth) * 4;
-                                    r += pixel[0];
-                                    g += pixel[1];
-                                    b += pixel[2];
-                                    a += pixel[3];
-                                }
-                            }
-
-                            auto* pixel = outTexture->data.data() + getIndex(x, y, sWidth) * 4;
-                            pixel[0] = b8(r / factor2);
-                            pixel[1] = b8(g / factor2);
-                            pixel[2] = b8(b / factor2);
-                            pixel[3] = b8(a / factor2);
-                        }
-                    }
-                } else {
-                    auto pData = reinterpret_cast<const std::byte*>(imageData);
-                    outTexture->data.assign(pData, pData + (width * height * 4));
-                    outTexture->size = Vec2U(u32(width), u32(height));
-                }
-
-                stbi_image_free(imageData);
-            }
-        }
-
-        if (outTexture->data.empty()) {
-            outTexture->data.resize(4);
-            outTexture->data[0] = b8(255);
-            outTexture->data[1] = b8(255);
-            outTexture->data[2] = b8(255);
-            outTexture->data[3] = b8(255);
-            outTexture->size = Vec2U(1, 1);
-        }
+        outTexture->data.resize(s_ImageProcessor.GetImageDataSize());
+        std::memcpy(outTexture->data.data(), s_ImageProcessor.GetImageData(), outTexture->data.size());
+        outTexture->size = s_ImageProcessor.GetImageDimensions();
+        outTexture->minAlpha = s_ImageProcessor.GetMinAlpha();
+        outTexture->maxAlpha = s_ImageProcessor.GetMaxAlpha();
     }
 
     void GltfImporterImpl::ProcessMaterials()
