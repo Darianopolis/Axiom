@@ -7,7 +7,7 @@
 
 layout(location = 0) rayPayloadEXT        RayPayload rayPayload;
 layout(location = 1) rayPayloadEXT        uint shadowRayPayload;
-layout(location = 0) hitObjectAttributeNV vec3             bary;
+layout(location = 0) hitObjectAttributeNV vec2             bary;
 
 bool IsUnobstructed(vec3 origin, vec3 dir, float tMax)
 {

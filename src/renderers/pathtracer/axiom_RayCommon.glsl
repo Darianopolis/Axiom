@@ -43,8 +43,8 @@ layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer Ins
 
 layout(buffer_reference, scalar, buffer_reference_align = 8) readonly buffer GeometryInfo {
     ShadingAttributes shadingAttributes;
-    Index         indices;
-    Material     material;
+    Index                       indices;
+    Material                   material;
 };
 
 layout(push_constant, scalar) uniform pc_ {

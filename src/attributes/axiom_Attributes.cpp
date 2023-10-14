@@ -1,6 +1,10 @@
 #include "axiom_Attributes.hpp"
 
+#include <nova/core/nova_Files.hpp>
+
 #include <stb_image.h>
+
+#include <base64.h>
 
 namespace axiom
 {
@@ -266,18 +270,46 @@ namespace axiom
     {
         (void)type;
 
-        i32 width, height, channels;
-        stbi_uc* data = nullptr;
         if (embeddedSize) {
-            data = stbi_load_from_memory(
+            NOVA_THROW("In-memory caching not currently supported!");
+        }
+
+        auto cachedName = base64_encode(std::string_view(path), true);
+        auto cachedPath = std::filesystem::path("cache") / cachedName;
+
+        std::unique_lock lock{ mutex };
+
+        if (std::filesystem::exists(cachedPath)) {
+            lock.unlock();
+
+            nova::File file{ cachedPath.string().c_str() };
+            ImageHeader header;
+            file.Read(header);
+
+            size = { header.width, header.height };
+            minAlpha = header.minAlpha;
+            maxAlpha = header.maxAlpha;
+
+            data.resize(header.size);
+            file.Read(data.data(), header.size);
+
+            return;
+        }
+
+        NOVA_LOG("Image[{}] not cached, generating...", path);
+
+        i32 width, height, channels;
+        stbi_uc* pData = nullptr;
+        if (embeddedSize) {
+            pData = stbi_load_from_memory(
                 reinterpret_cast<const uc8*>(path), i32(embeddedSize),
                 &width, &height, &channels,
                 STBI_rgb_alpha);
         } else {
-            data = stbi_load(path, &width, &height, &channels, STBI_rgb_alpha);
+            pData = stbi_load(path, &width, &height, &channels, STBI_rgb_alpha);
         }
 
-        if (!data) {
+        if (!pData) {
             NOVA_THROW("File not loaded!");
         }
 
@@ -301,7 +333,7 @@ namespace axiom
 
                     for (i32 dx = 0; dx < factor; ++dx) {
                         for (i32 dy = 0; dy < factor; ++dy) {
-                            auto* pixel = data + getIndex(x * factor + dx, y * factor + dy, uWidth) * 4;
+                            auto* pixel = pData + getIndex(x * factor + dx, y * factor + dy, uWidth) * 4;
                             acc.r += pixel[0];
                             acc.g += pixel[1];
                             acc.b += pixel[2];
@@ -320,10 +352,10 @@ namespace axiom
         } else {
 
             image.init(width, height);
-            std::memcpy(image.get_pixels().data(), data, width * height * 4);
+            std::memcpy(image.get_pixels().data(), pData, width * height * 4);
         }
 
-        stbi_image_free(data);
+        stbi_image_free(pData);
 
         minAlpha = 1.f;
         maxAlpha = 0.f;
@@ -349,29 +381,54 @@ namespace axiom
             }
         }
 
-        rdo_bc::rdo_bc_params params;
-        params.m_bc7enc_reduce_entropy = true;
-        params.m_rdo_multithreading    = false;
+        size = { width, height };
 
-        encoder.init(image, params);
-        encoder.encode();
+        constexpr bool UseBC7 = true;
+
+        if (UseBC7) {
+            rdo_bc::rdo_bc_params params;
+            params.m_bc7enc_reduce_entropy = true;
+            params.m_rdo_multithreading    = true;
+
+            encoder.init(image, params);
+            encoder.encode();
+
+            data.resize(encoder.get_total_blocks_size_in_bytes());
+            std::memcpy(data.data(), encoder.get_blocks(), encoder.get_total_blocks_size_in_bytes());
+        } else {
+            auto byteSize = width * height * 4;
+            data.resize(byteSize);
+            std::memcpy(data.data(), image.get_pixels().data(), byteSize);
+        }
+
+        {
+            nova::File file{ cachedPath.string().c_str(), true };
+
+            ImageHeader header{};
+            header.width = size.x;
+            header.height = size.y;
+            header.minAlpha = minAlpha;
+            header.maxAlpha = maxAlpha;
+            header.size = u32(data.size());
+
+            file.Write(header);
+            file.Write(data.data(), header.size);
+        }
     }
 
     const void* ImageProcessor::GetImageData()
     {
-        return encoder.get_blocks();
-        // return image.get_pixels().data();
+        return data.data();
     }
 
     usz ImageProcessor::GetImageDataSize()
     {
-        return encoder.get_total_blocks_size_in_bytes();
-        // return image.width() * image.height() * 4;
+        return data.size();
     }
 
     Vec2U ImageProcessor::GetImageDimensions()
     {
-        return{ image.width(), image.height() };
+        return size;
     }
 
     nova::Format ImageProcessor::GetImageFormat()

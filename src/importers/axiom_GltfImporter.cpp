@@ -147,6 +147,35 @@ namespace axiom
 
             impl.ProcessScene(impl.asset->scenes[impl.asset->defaultScene.value()]);
         }
+
+        // Count stuff
+
+        u64 numVertices = 0;
+        u64 numIndices = 0;
+        u64 numMeshes = scene->meshes.size();
+        u64 textureDataSize = 0;
+        u64 numTextures = scene->textures.size();
+        u64 numMaterials = scene->materials.size();
+        u64 numInstances = scene->instances.size();
+        u64 numNodes = impl.asset->nodes.size();
+
+        for (auto& mesh : scene->meshes) {
+            numVertices += mesh->shadingAttributes.size();
+            numIndices += mesh->indices.size();
+        }
+
+        for (auto& texture : scene->textures) {
+            textureDataSize += texture->data.size();
+        }
+
+        NOVA_LOGEXPR(numVertices);
+        NOVA_LOGEXPR(numIndices);
+        NOVA_LOGEXPR(numMeshes);
+        NOVA_LOGEXPR(textureDataSize);
+        NOVA_LOGEXPR(numTextures);
+        NOVA_LOGEXPR(numMaterials);
+        NOVA_LOGEXPR(numInstances);
+        NOVA_LOGEXPR(numNodes);
     }
 
     void GltfImporterImpl::ProcessMeshes()
@@ -248,7 +277,8 @@ namespace axiom
                 { &outMesh->positionAttributes[vertexOffset], sizeof(outMesh->positionAttributes[0]), positions.count },
                 hasNormals
                     ? InStridedRegion{ &vertices[0].normal, sizeof(vertices[0]), positions.count }
-                    : InStridedRegion{},
+                    :
+                    InStridedRegion{},
                 hasTexCoords
                     ? InStridedRegion{ &vertices[0].texCoords, sizeof(vertices[0]), positions.count }
                     : InStridedRegion{},
@@ -287,9 +317,6 @@ namespace axiom
         std::visit(nova::Overloads {
             [&](fastgltf::sources::URI& uri) {
                 auto path = std::format("{}/{}", baseDir.string(), uri.uri.path());
-#ifdef AXIOM_TRACE_IMPORT // ---------------------------------------------------
-                NOVA_LOG("  Texture[{}] = File[{}]", index, path);
-#endif // ----------------------------------------------------------------------
                 s_ImageProcessor.ProcessImage(path.c_str(), 0, ImageType::ColorAlpha, MaxDim, {});
             },
             [&](fastgltf::sources::Vector& vec) {

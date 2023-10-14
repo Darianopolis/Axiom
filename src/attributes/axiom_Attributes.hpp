@@ -57,6 +57,16 @@ namespace axiom
     };
     NOVA_DECORATE_FLAG_ENUM(ImageProcess)
 
+    struct ImageHeader
+    {
+        u32           width;
+        u32          height;
+        nova::Format format;
+        f32        minAlpha;
+        f32        maxAlpha;
+        u32            size;
+    };
+
     struct GPU_TangentSpace
     {
         // https://johnwhite3d.blogspot.com/2017/10/signed-octahedron-normal-encoding.html?view=classic
@@ -101,6 +111,11 @@ namespace axiom
     {
         utils::image_u8          image;
         rdo_bc::rdo_bc_encoder encoder;
+
+        std::mutex mutex;
+
+        Vec2U             size;
+        std::vector<char> data;
 
         f32 minAlpha = 0.f;
         f32 maxAlpha = 1.f;

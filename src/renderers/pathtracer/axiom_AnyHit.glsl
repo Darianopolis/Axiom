@@ -3,7 +3,7 @@
 
 #include "axiom_RayCommon.glsl"
 
-hitAttributeEXT vec3 bary;
+hitAttributeEXT vec2 bary;
 
 void main()
 {

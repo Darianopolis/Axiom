@@ -596,7 +596,7 @@ namespace axiom
             nova::DescriptorHandle source;
             nova::DescriptorHandle target;
             f32                  exposure;
-            i32                      mode;
+            u32                      mode;
         };
 
         cmd.PushConstants(PC_PostProcess {
@@ -604,7 +604,7 @@ namespace axiom
             .source = accumulationTargetIdx,
             .target = targetIdx,
             .exposure = exposure,
-            .mode = u8(mode),
+            .mode = u32(mode),
         });
 
         cmd.BindShaders({ postProcessShader });
