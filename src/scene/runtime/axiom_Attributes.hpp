@@ -118,6 +118,7 @@ namespace axiom
 
         Vec2U             size;
         std::vector<char> data;
+        nova::Format    format;
 
         f32 minAlpha = 0.f;
         f32 maxAlpha = 1.f;

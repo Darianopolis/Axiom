@@ -1,37 +1,19 @@
-#include <scene/axiom_SceneIR.hpp>
+#include "axiom_GltfImporter.hpp"
 
 #include <fastgltf/parser.hpp>
 #include <fastgltf/glm_element_traits.hpp>
 
 namespace axiom
 {
-    struct GltfImporter
+    void GltfImporter::Reset()
     {
-        std::unique_ptr<fastgltf::Asset> asset;
-
-        std::filesystem::path dir;
-
-        Scene scene;
-
-        std::vector<std::pair<u32, u32>> gltfMeshOffsets;
-
-        void Import(const std::filesystem::path& path);
-
-        void ProcessTexture(u32 texIdx);
-        void ProcessMaterial(u32 matIdx);
-        void ProcessMesh(u32 gltfMeshIdx, u32 primIdx);
-        void ProcessNode(usz nodeIdx, Mat4 parentTransform);
-    };
-
-    Scene scene::ImportGltf(const std::filesystem::path& path)
-    {
-        GltfImporter importer;
-        importer.Import(path);
-        return std::move(importer.scene);
+        gltfMeshOffsets.clear();
+        scene.Clear();
     }
 
-    void GltfImporter::Import(const std::filesystem::path& path)
+    Scene GltfImporter::Import(const std::filesystem::path& path)
     {
+        Reset();
         dir = path.parent_path();
 
         fastgltf::Parser parser {
@@ -104,6 +86,8 @@ namespace axiom
         for (auto rootNodeIndex : asset->scenes[asset->defaultScene.value()].nodeIndices) {
             ProcessNode(rootNodeIndex, Mat4(1.f));
         }
+
+        return std::move(scene);
     }
 
     void GltfImporter::ProcessTexture(u32 texIdx)

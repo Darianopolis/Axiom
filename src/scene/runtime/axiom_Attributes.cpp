@@ -281,11 +281,14 @@ namespace axiom
     {
         (void)type;
 
+        constexpr bool UseBC7 = true;
+
         std::string cachedName;
         std::filesystem::path cachedPath;
 
         if (!embeddedSize) {
             cachedName = base64_encode(std::string_view(path), true);
+            cachedName += std::format("${}${}${}", u32(processes), maxDim, u32(UseBC7));
             cachedPath = std::filesystem::path("cache") / cachedName;
         }
 
@@ -301,6 +304,8 @@ namespace axiom
             size = { header.width, header.height };
             minAlpha = header.minAlpha;
             maxAlpha = header.maxAlpha;
+
+            format = header.format;
 
             data.resize(header.size);
             file.Read(data.data(), header.size);
@@ -395,12 +400,12 @@ namespace axiom
 
         size = { width, height };
 
-        constexpr bool UseBC7 = true;
-
         if (UseBC7) {
             rdo_bc::rdo_bc_params params;
             params.m_bc7enc_reduce_entropy = true;
             params.m_rdo_multithreading    = true;
+
+            format = nova::Format::BC7_Unorm;
 
             encoder.init(image, params);
             encoder.encode();
@@ -411,6 +416,8 @@ namespace axiom
             auto byteSize = width * height * 4;
             data.resize(byteSize);
             std::memcpy(data.data(), image.get_pixels().data(), byteSize);
+
+            format = nova::Format::RGBA8_UNorm;
         }
 
         if (!embeddedSize) {
@@ -422,6 +429,7 @@ namespace axiom
             header.minAlpha = minAlpha;
             header.maxAlpha = maxAlpha;
             header.size = u32(data.size());
+            header.format = format;
 
             file.Write(header);
             file.Write(data.data(), header.size);
@@ -445,6 +453,6 @@ namespace axiom
 
     nova::Format ImageProcessor::GetImageFormat()
     {
-        return nova::Format::BC7_Unorm;
+        return format;
     }
 }

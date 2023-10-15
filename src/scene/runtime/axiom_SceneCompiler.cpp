@@ -1,126 +1,8 @@
-#include "axiom_SceneIR.hpp"
-
-#include <axiom_Core.hpp>
+#include "axiom_SceneCompiler.hpp"
 
 namespace axiom
 {
-    void scene::DebugPrintScene(Scene& scene)
-    {
-        auto writeHeader = [&](std::string_view header) {
-            NOVA_LOG("\n{:=^80}\n", std::format(" {} ", header));
-        };
-
-        writeHeader("Overview");
-
-        NOVA_LOG("Textures = {}", scene.textures.size());
-        {
-            std::unordered_set<std::string_view> uniquePaths;
-            uint32_t rawDataCount = 0;
-            uint32_t duplicatedIds = 0;
-            for (auto& tex : scene.textures) {
-                if (auto uri = std::get_if<ImageFileURI>(&tex.data)) {
-                    if (uniquePaths.contains(uri->uri)) {
-                        duplicatedIds++;
-                    } else {
-                        uniquePaths.insert(uri->uri);
-                    }
-                } else {
-                    rawDataCount++;
-                }
-            }
-            NOVA_LOG("  Unique Files: {} ({} duplicates)", uniquePaths.size(), duplicatedIds);
-            NOVA_LOG("  Buffers: {}", rawDataCount);
-        }
-        NOVA_LOG("Materials: {}", scene.materials.size());
-        NOVA_LOG("Meshes: {}", scene.meshes.size());
-        NOVA_LOG("Instances: {}", scene.instances.size());
-
-        writeHeader("Textures");
-
-        for (auto& texture : scene.textures) {
-            std::cout << "Texture[" << (&texture - scene.textures.data()) << "]";
-            if (auto uri = std::get_if<ImageFileURI>(&texture.data)) {
-                NOVA_LOG(": File[{}]", uri->uri);
-            } else if (auto file = std::get_if<ImageFileBuffer>(&texture.data)) {
-                NOVA_LOG(": InlineFile[magic = {}|{:#x}, size = {}]",
-                    std::string_view(reinterpret_cast<char*>(file->data.data())).substr(0, 4),
-                    *reinterpret_cast<uint32_t*>(file->data.data()),
-                    file->data.size());
-            } else if (auto buffer = std::get_if<ImageBuffer>(&texture.data)) {
-                const char* formatName = "Unknown";
-                switch (buffer->format) {
-                        using enum BufferFormat;
-                    break;case RGBA8: formatName = "RGBA8";
-                }
-                NOVA_LOG(": Raw[size = ({}, {}), format = {}]", buffer->size.x, buffer->size.y, formatName);
-            }
-        }
-
-        writeHeader("Materials");
-
-        for (auto& material: scene.materials) {
-            NOVA_LOG("Material[{}]", &material - scene.materials.data());
-            if (material.alphaBlend || material.alphaMask) {
-                NOVA_LOG("  Alpha[blend = {}, mask = {}, cutoff = {}]",
-                    material.alphaBlend, material.alphaMask, material.alphaCutoff);
-            }
-            if (material.decal) {
-                NOVA_LOG("  Decal");
-            }
-            if (material.volume) {
-                NOVA_LOG("  Volume");
-            }
-            for (auto& channel : material.channels) {
-                std::cout << "  Channel[" << (&channel - material.channels.data()) << "]";
-                const char* typeName = "Unknown";
-                switch (channel.type) {
-                        using enum ChannelType;
-                    break;case BaseColor:        typeName = "BaseColor";
-                    break;case Alpha:            typeName = "Alpha";
-                    break;case Normal:           typeName = "Normal";
-                    break;case Emissive:         typeName = "Emissive";
-                    break;case Metalness:        typeName = "Metalness";
-                    break;case Roughness:        typeName = "Roughness";
-                    break;case Transmission:     typeName = "Transmission";
-                    break;case Subsurface:       typeName = "Subsurface";
-                    break;case SpecularColor:    typeName = "SpecularColor";
-                    break;case SpecularStrength: typeName = "SpecularStrength";
-                    break;case Specular:         typeName = "Specular";
-                    break;case Glossiness:       typeName = "Glossiness";
-                    break;case Clearcoat:        typeName = "Clearcoat";
-                    break;case Diffuse:          typeName = "Diffuse";
-                    break;case Ior:              typeName = "Ior";
-                }
-                std::cout << ": " << typeName << '\n';
-                if (channel.texture.textureIdx != InvalidIndex) {
-                    std::cout << std::format("    Texture[{}]: (", channel.texture.textureIdx);
-                    for (auto& swizzle : channel.texture.channels) {
-                        if (swizzle == -1) break;
-                        if (&swizzle != channel.texture.channels.data())
-                            std::cout << ", ";
-                        std::cout << i32(swizzle);
-                    }
-                    std::cout << ")\n";
-                }
-                auto v = channel.value;
-                std::cout << std::format("    Value: ({}, {}, {}, {})\n", v.r, v.g, v.b, v.a);
-            }
-        }
-
-        writeHeader("Materials");
-
-        for (auto& instance : scene.instances) {
-            NOVA_LOG("Instance[{}]", &instance - scene.instances.data());
-            NOVA_LOG("  Mesh[{}]", instance.meshIdx);
-            NOVA_LOG("  Transform:");
-            auto& M = instance.transform;
-            NOVA_LOG("    {:12.5f} {:12.5f} {:12.5f} {:12.5f}", M[0][0], M[1][0], M[2][0], M[3][0]);
-            NOVA_LOG("    {:12.5f} {:12.5f} {:12.5f} {:12.5f}", M[0][1], M[1][1], M[2][1], M[3][1]);
-            NOVA_LOG("    {:12.5f} {:12.5f} {:12.5f} {:12.5f}", M[0][2], M[1][2], M[2][2], M[3][2]);
-        }
-    }
-
-    void scene::BuildScene(Scene& inScene, LoadableScene& outScene, const SceneProcessSettings& settings)
+    void SceneCompiler::Compile(Scene& inScene, CompiledScene& outScene)
     {
         auto defaultMaterial = Ref<UVMaterial>::Create();
         outScene.materials.push_back(defaultMaterial);
@@ -141,7 +23,7 @@ namespace axiom
             outScene.textures[i] = outTexture;
 
             ImageProcess processes = {};
-            if (settings.flipNormalMapZ) {
+            if (flipNormalMapZ) {
                 for (auto& material : inScene.materials) {
                     if (material.GetChannel(ChannelType::Normal)->texture.textureIdx == i) {
                         processes |= ImageProcess::FlipNrmZ;
@@ -150,10 +32,24 @@ namespace axiom
                 }
             }
 
+            void* t = nullptr;
+            uintptr_t s = reinterpret_cast<uintptr_t>(t);
+
+            // constexpr u32 MaxDim = 512;
+            constexpr u32 MaxDim = 4096;
+
             if (auto uri = std::get_if<ImageFileURI>(&inTexture.data)) {
-                s_ImageProcessor.ProcessImage(uri->uri.c_str(), 0, ImageType::ColorAlpha, 4096, processes);
+                auto path = std::filesystem::path(uri->uri);
+                if (path.extension() == ".dds") {
+                    path.replace_extension(".png");
+                }
+                if (!std::filesystem::exists(path)) {
+                    NOVA_THROW("Cannot find file: {}", path.string());
+                }
+                path = std::filesystem::canonical(path);
+                s_ImageProcessor.ProcessImage(path.string().c_str(), 0, ImageType::ColorAlpha, MaxDim, processes);
             } else if (auto file = std::get_if<ImageFileBuffer>(&inTexture.data)) {
-                s_ImageProcessor.ProcessImage((const char*)file->data.data(), file->data.size(), ImageType::ColorAlpha, 4096, {});
+                s_ImageProcessor.ProcessImage((const char*)file->data.data(), file->data.size(), ImageType::ColorAlpha, MaxDim, {});
             } else if (auto buffer = std::get_if<ImageBuffer>(&inTexture.data)) {
                 NOVA_THROW("Buffer data source not currently supported");
             }
@@ -163,6 +59,7 @@ namespace axiom
             outTexture->size = s_ImageProcessor.GetImageDimensions();
             outTexture->minAlpha = s_ImageProcessor.GetMinAlpha();
             outTexture->maxAlpha = s_ImageProcessor.GetMaxAlpha();
+            outTexture->format = s_ImageProcessor.GetImageFormat();
         }
 
         defaultMaterial->baseColor_alpha = Ref<UVTexture>::Create();
@@ -279,7 +176,7 @@ namespace axiom
             usz vertexCount = outMesh->positionAttributes.size();
             usz indexCount = outMesh->indices.size();
 
-            s_MeshProcessor.flipUVs = settings.flipUVs;
+            s_MeshProcessor.flipUVs = flipUVs;
             s_MeshProcessor.ProcessMesh(
                 { &outMesh->positionAttributes[0], sizeof(outMesh->positionAttributes[0]), vertexCount },
                 !inMesh.normals.empty()

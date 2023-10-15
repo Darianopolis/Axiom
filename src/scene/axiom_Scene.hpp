@@ -1,7 +1,6 @@
 #pragma once
 
 #include <axiom_Core.hpp>
-#include <axiom_Scene.hpp>
 
 namespace axiom
 {
@@ -90,8 +89,6 @@ namespace axiom
         bool      decal = false;
     };
 
-// -----------------------------------------------------------------------------
-
     struct Mesh
     {
         std::vector<Vec3> positions;
@@ -113,21 +110,15 @@ namespace axiom
         std::vector<Material> materials;
         std::vector<Mesh>        meshes;
         std::vector<Instance> instances;
-    };
 
-    struct SceneProcessSettings
-    {
-        bool         genTBN = false;
-        bool        flipUVs = false;
-        bool flipNormalMapZ = false;
-    };
+        void Clear()
+        {
+            textures.clear();
+            materials.clear();
+            meshes.clear();
+            instances.clear();
+        }
 
-    namespace scene
-    {
-        Scene ImportGltf(const std::filesystem::path& path);
-        Scene ImportObj(const std::filesystem::path& path);
-        Scene ImportFbx(const std::filesystem::path& path);
-        void DebugPrintScene(Scene& scene);
-        void BuildScene(Scene& inScene, LoadableScene& outScene, const SceneProcessSettings& settings);
-    }
+        void Debug();
+    };
 }

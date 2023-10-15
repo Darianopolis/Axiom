@@ -1,5 +1,5 @@
 #include "axiom_Common.glsl"
-#include "src/attributes/axiom_Attributes.glsl"
+#include "src/scene/runtime/axiom_Attributes.glsl"
 
 #extension GL_EXT_ray_tracing                            : require
 #extension GL_EXT_ray_tracing_position_fetch             : require

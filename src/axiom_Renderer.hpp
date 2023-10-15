@@ -1,6 +1,6 @@
 #pragma once
 
-#include "axiom_Scene.hpp"
+#include <scene/runtime/axiom_CompiledScene.hpp>
 
 #include <nova/core/nova_SubAllocation.hpp>
 #include <nova/rhi/nova_RHI.hpp>
@@ -29,7 +29,7 @@ namespace axiom
     public:
         virtual ~Renderer() = 0;
 
-        virtual void CompileScene(LoadableScene& scene, nova::CommandPool cmdPool, nova::Fence fence) = 0;
+        virtual void CompileScene(CompiledScene& scene, nova::CommandPool cmdPool, nova::Fence fence) = 0;
 
         virtual void ResetSamples() = 0;
         virtual void SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov) = 0;

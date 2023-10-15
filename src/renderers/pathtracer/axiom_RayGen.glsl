@@ -424,7 +424,8 @@ void main()
                     if (RandomUNorm() > 0.5)
                     {
                         vec3 sampleDir = RandomOnCone(SunDir, SunCosTheta);
-                        if (IsUnobstructed(OffsetPointByNormal(pos, flatNrm), sampleDir, 8000000.0)) {
+                        // if (IsUnobstructed(OffsetPointByNormal(pos, flatNrm), sampleDir, 8000000.0)) {
+                        if (IsUnobstructed(pos + flatNrm * 0.01, sampleDir, 8000000.0)) {
                             color += throughput * SunIntensity *
                                 CookTorranceBrdf(nrm, -dir, sampleDir, baseColor, roughness, metalness, 1.5, true);
                         }

@@ -1,8 +1,10 @@
-#include "axiom_Scene.hpp"
-#include "axiom_Importer.hpp"
 #include "axiom_Renderer.hpp"
 
-#include <scene/axiom_SceneIR.hpp>
+#include <scene/axiom_Scene.hpp>
+#include <scene/runtime/axiom_SceneCompiler.hpp>
+#include <scene/import/axiom_GltfImporter.hpp>
+#include <scene/import/axiom_FbxImporter.hpp>
+#include <scene/import/axiom_AssimpImporter.hpp>
 
 #include <nova/rhi/nova_RHI.hpp>
 #include <nova/rhi/vulkan/nova_VulkanRHI.hpp>
@@ -21,7 +23,6 @@ constexpr std::string_view UsageString =
     "Usage: [options] \"path/to/scene.gltf\" \"scene name\"\n"
     "options:\n"
     "  --path-trace  : Path tracing renderer\n"
-    "  --gen-tbn     : Reconstruct normals\n"
     "  --flip-uvs    : Flip UVs vertically\n"
     "  --flip-nmap-z : Flip normal map Z axis\n"
     "  --assimp      : Use assimp importer (experimental)\n"
@@ -29,9 +30,13 @@ constexpr std::string_view UsageString =
 
 int main(int argc, char* argv[])
 {
+    axiom::SceneCompiler compiler;
+    axiom::GltfImporter gltfImporter;
+    axiom::FbxImporter fbxImporter;
+    axiom::AssimpImporter assimpImporter;
+
     bool pathTrace = false;
     bool raster = false;
-    axiom::ImportSettings settings;
     bool useAssimp = false;
     std::vector<std::filesystem::path> paths;
 
@@ -42,12 +47,10 @@ int main(int argc, char* argv[])
             pathTrace = true;
         } else if (arg == "--raster") {
             raster = true;
-        } else if (arg == "--gen-tbn") {
-            settings.genTBN = true;
         } else if (arg == "--flip-uvs") {
-            settings.flipUVs = true;
+            compiler.flipUVs = true;
         } else if (arg == "--flip-nmap-z") {
-            settings.flipNormalMapZ = true;
+            compiler.flipNormalMapZ = true;
         } else if (arg == "--assimp") {
             useAssimp = true;
         } else {
@@ -83,33 +86,26 @@ int main(int argc, char* argv[])
     NOVA_TIMEIT_RESET();
 // -----------------------------------------------------------------------------
 
-    axiom::LoadableScene scene;
+    axiom::CompiledScene compiledScene;
 
     for (auto& path : paths) {
         auto ext = path.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return char(std::tolower(c)); });
-        bool isGltf = ext == ".gltf" || ext == ".glb";
-        bool isFbx = ext == ".fbx";
-        if (useAssimp || (!isGltf && !isFbx)) {
-            auto importer = axiom::CreateAssimpImporter(scene);
-        } else if (isGltf) {
-            axiom::CreateGltfImporter(scene)->Import(path, settings);
+
+        axiom::Scene scene;
+
+        if (useAssimp) {
+            scene = assimpImporter.Import(path);
+        } else if (ext == ".gltf" || ext == ".glb") {
+            scene = gltfImporter.Import(path);
+        } else if (ext == ".fbx") {
+            scene = fbxImporter.Import(path);
         } else {
-            axiom::Scene irScene;
-            if (isGltf) {
-                irScene = axiom::scene::ImportGltf(path);
-            } else if (isFbx) {
-                irScene = axiom::scene::ImportFbx(path);
-            } else {
-                NOVA_THROW("No new importer for extension: {}", ext);
-            }
-            // axiom::scene::DebugPrintScene(irScene);
-            axiom::scene::BuildScene(irScene, scene, axiom::SceneProcessSettings {
-                .genTBN = settings.genTBN,
-                .flipUVs = settings.flipUVs,
-                .flipNormalMapZ = settings.flipNormalMapZ,
-            });
+            scene = assimpImporter.Import(path);
         }
+
+        scene.Debug();
+        compiler.Compile(scene, compiledScene);
     }
 
 // -----------------------------------------------------------------------------
@@ -151,7 +147,7 @@ int main(int argc, char* argv[])
     } else if (raster) {
         renderer = axiom::CreateRasterRenderer(context, heap, &heapSlots);
     }
-    renderer->CompileScene(scene, cmdPool, fence);
+    renderer->CompileScene(compiledScene, cmdPool, fence);
 
 // -----------------------------------------------------------------------------
     NOVA_TIMEIT("compile-scene");

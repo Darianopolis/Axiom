@@ -1,83 +1,28 @@
-#include <scene/axiom_SceneIR.hpp>
+#include "axiom_FbxImporter.hpp"
 
 #include <ufbx.h>
 
-#include <assimp/Importer.hpp>
-#include <assimp/scene.h>
-#include <assimp/postprocess.h>
-
-namespace {
-    using namespace axiom;
-
-    struct FbxIndex
-    {
-        u32 value = InvalidIndex;
-    };
-
-    struct FbxVertex
-    {
-        Vec3 pos = {};
-        Vec2  uv = {};
-        Vec3 nrm = {};
-
-        bool operator==(const FbxVertex& other) const noexcept {
-            return pos == other.pos
-                && uv == other.uv
-                && nrm == other.nrm;
-        }
-    };
-}
-
-template<>
-struct ankerl::unordered_dense::hash<FbxVertex>
-{
-    using is_avalanching = void;
-    uint64_t operator()(const FbxVertex& key) const noexcept {
-        return detail::wyhash::hash(&key, sizeof(key));
-    }
-};
-
 namespace axiom
 {
-    struct FbxImporter
+    FbxImporter::~FbxImporter()
     {
-        ufbx_scene* fbx;
-
-        std::filesystem::path dir;
-
-        Scene scene;
-
-        std::vector<std::pair<u32, u32>> fbxMeshOffsets;
-
-        HashMap<void*, u32>  textureIndices;
-        HashMap<void*, u32> materialIndices;
-
-        std::vector<u32>           triIndices;
-        HashMap<FbxVertex, FbxIndex> uniqueVertices;
-        std::vector<FbxVertex>     vertexIndices;
-
-        ~FbxImporter()
-        {
-            ufbx_free(fbx);
-        }
-
-        void Import(const std::filesystem::path& path);
-
-        void ProcessTexture(u32 texIdx);
-        void ProcessMaterial(u32 matIdx);
-        void ProcessMesh(u32 fbxMeshIdx, u32 primIdx);
-        void ProcessNode(ufbx_node* node, Mat4 parentTransform);
-    };
-
-    Scene scene::ImportFbx(const std::filesystem::path& path)
-    {
-        FbxImporter importer;
-        importer.Import(path);
-        return std::move(importer.scene);
+        ufbx_free(fbx);
     }
 
-    void FbxImporter::Import(const std::filesystem::path& path)
+    void FbxImporter::Reset()
     {
+        scene.Clear();
+        fbxMeshOffsets.clear();
+        textureIndices.clear();
+        materialIndices.clear();
+        triIndices.clear();
+        uniqueVertices.clear();
+        vertexIndices.clear();
+    }
+
+    Scene FbxImporter::Import(const std::filesystem::path& path)
+    {
+        Reset();
         dir = path.parent_path();
 
         ufbx_load_opts opts{};
@@ -105,6 +50,8 @@ namespace axiom
         }
 
         ProcessNode(fbx->root_node, Mat4(1.f));
+
+        return std::move(scene);
     }
 
     void FbxImporter::ProcessTexture(u32 texIdx)
@@ -121,14 +68,7 @@ namespace axiom
                     (const u8*)inTexture->content.data + inTexture->content.size),
             };
         } else if (inTexture->has_file) {
-            auto path = std::string(inTexture->filename.data, inTexture->filename.length);
-            if (!path.ends_with(".png")) {
-                usz dot = path.rfind('.');
-                if (dot != std::string::npos) {
-                    path = path.substr(0, dot) +".png";
-                }
-                outTexture.data = ImageFileURI(std::move(path));
-            }
+            outTexture.data = ImageFileURI(std::string(inTexture->filename.data, inTexture->filename.length));
         } else {
             NOVA_THROW("Non-file images not currently supported");
         }
