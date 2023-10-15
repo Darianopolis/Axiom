@@ -2,6 +2,8 @@
 #include "axiom_Importer.hpp"
 #include "axiom_Renderer.hpp"
 
+#include <scene/axiom_SceneIR.hpp>
+
 #include <nova/rhi/nova_RHI.hpp>
 #include <nova/rhi/vulkan/nova_VulkanRHI.hpp>
 
@@ -27,23 +29,6 @@ constexpr std::string_view UsageString =
 
 int main(int argc, char* argv[])
 {
-    // if (true) {
-    //     std::filesystem::path path = argv[1];
-
-    //     axiom::LoadableScene scene;
-
-    //     if (path.extension() == ".fbx") {
-    //         axiom::ImportFbx(scene, path);
-    //     } else if (path.extension() == ".obj") {
-    //         axiom::ImportObj(scene, path);
-    //     } else {
-    //         NOVA_LOG("Unknown file extension: {}", path.extension().string());
-    //         return 1;
-    //     }
-
-    //     return 0;
-    // }
-
     bool pathTrace = false;
     bool raster = false;
     axiom::ImportSettings settings;
@@ -100,12 +85,31 @@ int main(int argc, char* argv[])
 
     axiom::LoadableScene scene;
 
-    auto importer = useAssimp
-        ? axiom::CreateAssimpImporter(scene)
-        : axiom::CreateGltfImporter(scene);
-
     for (auto& path : paths) {
-        importer->Import(path, settings);
+        auto ext = path.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return char(std::tolower(c)); });
+        bool isGltf = ext == ".gltf" || ext == ".glb";
+        bool isFbx = ext == ".fbx";
+        if (useAssimp || (!isGltf && !isFbx)) {
+            auto importer = axiom::CreateAssimpImporter(scene);
+        } else if (isGltf) {
+            axiom::CreateGltfImporter(scene)->Import(path, settings);
+        } else {
+            axiom::Scene irScene;
+            if (isGltf) {
+                irScene = axiom::scene::ImportGltf(path);
+            } else if (isFbx) {
+                irScene = axiom::scene::ImportFbx(path);
+            } else {
+                NOVA_THROW("No new importer for extension: {}", ext);
+            }
+            // axiom::scene::DebugPrintScene(irScene);
+            axiom::scene::BuildScene(irScene, scene, axiom::SceneProcessSettings {
+                .genTBN = settings.genTBN,
+                .flipUVs = settings.flipUVs,
+                .flipNormalMapZ = settings.flipNormalMapZ,
+            });
+        }
     }
 
 // -----------------------------------------------------------------------------

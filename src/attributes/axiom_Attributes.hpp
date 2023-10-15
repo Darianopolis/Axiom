@@ -103,6 +103,8 @@ namespace axiom
              InStridedRegion        inIndices,
             OutStridedRegion outTangentSpaces,
             OutStridedRegion     outTexCoords);
+
+        bool flipUVs = false;
     };
 
     inline thread_local MeshProcessor s_MeshProcessor;

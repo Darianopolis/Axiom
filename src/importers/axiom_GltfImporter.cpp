@@ -409,10 +409,10 @@ namespace axiom
             break;case  Mask: outMaterial->alphaMask  = true;
         }
 
-        // TODO: Sponza temporary hack DELETEME
-        if (material.name == "dirt_decal") {
-            outMaterial->decal = true;
-        }
+        // // TODO: Sponza temporary hack DELETEME
+        // if (material.name == "dirt_decal") {
+        //     outMaterial->decal = true;
+        // }
     }
 
     void GltfImporterImpl::ProcessScene(const fastgltf::Scene& scene)

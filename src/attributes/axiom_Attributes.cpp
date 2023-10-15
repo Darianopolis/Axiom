@@ -198,6 +198,12 @@ namespace axiom
                 auto tc2 = texCoords.Get<Vec2>(v2i);
                 auto tc3 = texCoords.Get<Vec2>(v3i);
 
+                if (flipUVs) {
+                    tc1.y = 1.f - tc1.y;
+                    tc2.y = 1.f - tc2.y;
+                    tc3.y = 1.f - tc3.y;
+                }
+
                 auto u12 = tc2 - tc1;
                 auto u13 = tc3 - tc1;
 
@@ -252,8 +258,13 @@ namespace axiom
 
             // Quantize and output texture coordinates
 
-            outTexCoords.Get<GPU_TexCoords>(i)
-                = GPU_TexCoords(glm::packHalf2x16(hasTexCoords ? texCoords.Get<Vec2>(i) : Vec2(0.f)));
+            Vec2 uv = hasTexCoords
+                ? texCoords.Get<Vec2>(i)
+                : Vec2(0.f);
+            if (flipUVs) {
+                uv.y = 1.f - uv.y;
+            }
+            outTexCoords.Get<GPU_TexCoords>(i) = GPU_TexCoords(glm::packHalf2x16(uv));
         }
     }
 
@@ -270,16 +281,17 @@ namespace axiom
     {
         (void)type;
 
-        if (embeddedSize) {
-            NOVA_THROW("In-memory caching not currently supported!");
-        }
+        std::string cachedName;
+        std::filesystem::path cachedPath;
 
-        auto cachedName = base64_encode(std::string_view(path), true);
-        auto cachedPath = std::filesystem::path("cache") / cachedName;
+        if (!embeddedSize) {
+            cachedName = base64_encode(std::string_view(path), true);
+            cachedPath = std::filesystem::path("cache") / cachedName;
+        }
 
         std::unique_lock lock{ mutex };
 
-        if (std::filesystem::exists(cachedPath)) {
+        if (!embeddedSize && std::filesystem::exists(cachedPath)) {
             lock.unlock();
 
             nova::File file{ cachedPath.string().c_str() };
@@ -296,7 +308,7 @@ namespace axiom
             return;
         }
 
-        NOVA_LOG("Image[{}] not cached, generating...", path);
+        NOVA_LOG("Image[{}] not cached, generating...", embeddedSize ? "$embedded" : path);
 
         i32 width, height, channels;
         stbi_uc* pData = nullptr;
@@ -401,7 +413,7 @@ namespace axiom
             std::memcpy(data.data(), image.get_pixels().data(), byteSize);
         }
 
-        {
+        if (!embeddedSize) {
             nova::File file{ cachedPath.string().c_str(), true };
 
             ImageHeader header{};

@@ -433,6 +433,12 @@ void main()
                     }
                     else
                     {
+                        // bool flip = RandomUNorm() > 0.5;
+                        // if (flip) {
+                        //     nrm = -nrm;
+                        //     flatNrm = -flatNrm;
+                        // }
+
                         vec3 L = CosineSampleHemisphere();
                         float pdf = CosineSampleHemispherePDF(L.z);
                         L = ChangeBasis(L, nrm);

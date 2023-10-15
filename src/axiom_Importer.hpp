@@ -23,6 +23,4 @@ namespace axiom
 
     nova::Ref<Importer> CreateGltfImporter(LoadableScene& scene);
     nova::Ref<Importer> CreateAssimpImporter(LoadableScene& scene);
-    void ImportObj(LoadableScene& scene, std::filesystem::path path);
-    void ImportFbx(LoadableScene& scene, std::filesystem::path path);
 }

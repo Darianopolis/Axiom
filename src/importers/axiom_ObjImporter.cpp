@@ -1,13 +1,11 @@
-#include <axiom_Importer.hpp>
+#include <scene/axiom_SceneIR.hpp>
 
 #include <fast_obj.h>
 
 namespace axiom
 {
-    void ImportObj(LoadableScene& scene, std::filesystem::path path)
+    Scene scene::ImportObj(const std::filesystem::path& path)
     {
-        (void)scene;
-
         std::string pathStr = path.string();
         const char* pPath = pathStr.c_str();
 
@@ -33,5 +31,7 @@ namespace axiom
             }
             fast_obj_destroy(mesh);
         }
+
+        return{};
     }
 }
