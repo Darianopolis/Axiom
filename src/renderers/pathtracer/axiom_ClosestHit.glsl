@@ -1,6 +1,3 @@
-#version 460
-#extension GL_GOOGLE_include_directive : require
-
 #include "axiom_RayCommon.glsl"
 
 layout(location = 0) rayPayloadInEXT RayPayload rayPayload;

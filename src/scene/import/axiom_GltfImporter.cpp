@@ -185,6 +185,10 @@ namespace axiom
     {
         auto& primitive = asset->meshes[gltfMeshIdx].primitives[primitiveIndex];
 
+        if (asset->meshes[gltfMeshIdx].name.contains("decal")) {
+            return;
+        }
+
         if (!primitive.indicesAccessor.has_value()
                 || primitive.findAttribute("POSITION") == primitive.attributes.end())
             return;

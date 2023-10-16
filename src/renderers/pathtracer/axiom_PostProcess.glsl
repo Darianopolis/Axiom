@@ -1,6 +1,3 @@
-#version 460
-#extension GL_GOOGLE_include_directive : require
-
 #include "axiom_Common.glsl"
 
 // ACES: https://knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/
@@ -117,6 +114,57 @@ vec3 unreal(vec3 x) {
   return x / (x + 0.155) * 1.019;
 }
 
+const float saturation_compression = 0.1f;
+const float saturation_boost = 0.3f;
+vec3 tone_scale(vec3 color) { return color; }
+
+vec2 create_modified_primary(vec2 input_primary, vec2 white_point, float scaling, float rotation)
+{
+    vec2 output_primary = input_primary - white_point;
+
+    float primary_length = (1.0 + scaling) * length(output_primary);
+    float primary_angle = atan(output_primary.y, output_primary.x) + rotation;
+
+    output_primary = vec2(primary_length * cos(primary_angle), primary_length * sin(primary_angle));
+
+    return output_primary + white_point;
+}
+
+vec3 xy_to_xyz(vec2 input_color)
+{
+    return vec3(input_color.x / input_color.y, 1.0, (1.0 - (input_color.x + input_color.y)) / input_color.y);
+}
+
+vec3 agx_tonemapper(vec3 input_color)
+{
+    const vec2 srgb_red_primary = vec2(0.64, 0.33);
+    const vec2 srgb_green_primary = vec2(0.3, 0.6);
+    const vec2 srgb_blue_primary = vec2(0.15, 0.06);
+
+    const vec2 srgb_white_point = vec2(0.3127, 0.329);
+
+    mat3 srgb_xyz_matrix = mat3(vec3(0.4124, 0.2126, 0.0193), vec3(0.3576, 0.7152, 0.1192), vec3(0.1805, 0.0722, 0.9505));
+    mat3 xyz_srgb_matrix = inverse(srgb_xyz_matrix);
+
+    vec2 modified_red_primary = create_modified_primary(srgb_red_primary, srgb_white_point, saturation_compression, -0.0325);
+    vec2 modified_green_primary = create_modified_primary(srgb_green_primary, srgb_white_point, saturation_compression, 0.0);
+    vec2 modified_blue_primary = create_modified_primary(srgb_blue_primary, srgb_white_point, saturation_compression, 0.0374);
+
+    mat3 modified_rgb_xyz_matrix = mat3(xy_to_xyz(modified_red_primary), xy_to_xyz(modified_green_primary), xy_to_xyz(modified_blue_primary));
+
+    vec3 white_point_scale = inverse(modified_rgb_xyz_matrix) * xy_to_xyz(srgb_white_point);
+    modified_rgb_xyz_matrix = matrixCompMult(modified_rgb_xyz_matrix, mat3(white_point_scale.xxx, white_point_scale.yyy, white_point_scale.zzz));
+
+    mat3 xyz_modified_rgb_matrix = inverse(modified_rgb_xyz_matrix);
+
+    vec3 modified_color = xyz_modified_rgb_matrix * srgb_xyz_matrix * input_color;
+
+    modified_color = tone_scale(modified_color);
+    modified_color = mix(vec3(dot(modified_color, white_point_scale)), modified_color, 1.0 + saturation_boost);
+
+    return clamp(xyz_srgb_matrix * modified_rgb_xyz_matrix * modified_color, 0.0, 1.0);
+}
+
 layout(push_constant, scalar) uniform pc_ {
     uvec2     size;
     uint    source;
@@ -164,6 +212,8 @@ void main()
         break;case 8:
             color = unreal(color);
             noSRGBCorrection = true;
+        break;case 9:
+            color = agx_tonemapper(color);
     }
 
     // Apply sRGB correction

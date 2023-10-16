@@ -32,9 +32,6 @@ namespace axiom
                 }
             }
 
-            void* t = nullptr;
-            uintptr_t s = reinterpret_cast<uintptr_t>(t);
-
             // constexpr u32 MaxDim = 512;
             constexpr u32 MaxDim = 4096;
 

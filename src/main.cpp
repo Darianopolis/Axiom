@@ -387,7 +387,7 @@ int main(int argc, char* argv[])
 
             ImGui::DragFloat("Exposure", &renderer->exposure, 0.01f, 0.f, 10.f);
             ImGui::Combo("Tonemapping", reinterpret_cast<i32*>(&renderer->mode),
-                "None\0Aces\0Filmic\0Lottes\0Reinhard\0Reinhard2\0Uchimura\0Uncharted2\0Unreal");
+                "None\0Aces\0Filmic\0Lottes\0Reinhard\0Reinhard2\0Uchimura\0Uncharted2\0Unreal\0AgX");
         }
 
         imgui.EndFrame();

@@ -18,6 +18,7 @@ namespace axiom
         Uchimura   = 6,
         Uncharted2 = 7,
         Unreal     = 8,
+        AgX        = 9,
     };
 
     struct Renderer : nova::RefCounted

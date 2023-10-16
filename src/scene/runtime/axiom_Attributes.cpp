@@ -335,11 +335,9 @@ namespace axiom
         };
 
         if (width > maxDim || height > maxDim) {
-            i32 uWidth = width;
-            i32 uHeight = height;
             i32 factor = std::max(width / maxDim, height / maxDim);
-            i32 sWidth = uWidth / factor;
-            i32 sHeight = uHeight / factor;
+            i32 sWidth = width / factor;
+            i32 sHeight = height / factor;
             i32 factor2 = factor * factor;
 
             image.init(sWidth, sHeight);
@@ -350,7 +348,7 @@ namespace axiom
 
                     for (i32 dx = 0; dx < factor; ++dx) {
                         for (i32 dy = 0; dy < factor; ++dy) {
-                            auto* pixel = pData + getIndex(x * factor + dx, y * factor + dy, uWidth) * 4;
+                            auto* pixel = pData + getIndex(x * factor + dx, y * factor + dy, width) * 4;
                             acc.r += pixel[0];
                             acc.g += pixel[1];
                             acc.b += pixel[2];
