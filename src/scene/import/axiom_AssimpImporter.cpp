@@ -196,98 +196,100 @@ namespace axiom
             }
         }
 
-        auto addChannel = [&](
-                ChannelType type,
-                Span<std::pair<aiTextureType, Span<i8>>> texture,
-                Span<std::pair<const char*, Span<i8>>> properties) -> bool {
+        (void)outMaterial;
 
-            Channel channel;
-            channel.type = type;
+        // auto addChannel = [&](
+        //         ChannelType type,
+        //         Span<std::pair<aiTextureType, Span<i8>>> texture,
+        //         Span<std::pair<const char*, Span<i8>>> properties) -> bool {
 
-            bool foundTexture = false;
-            for (auto[texType, swizzle] : texture) {
-                auto textureIndex = findTexture({ texType });
-                if (!textureIndex) continue;
+        //     Property channel;
+        //     channel.type = type;
 
-                channel.texture.textureIdx = textureIndex.value();
-                for (u32 i = 0; i < swizzle.size(); ++i) {
-                    channel.texture.channels[i] = swizzle[i];
-                }
+        //     bool foundTexture = false;
+        //     for (auto[texType, swizzle] : texture) {
+        //         auto textureIndex = findTexture({ texType });
+        //         if (!textureIndex) continue;
 
-                foundTexture = true;
-                break;
-            }
+        //         channel.texture.textureIdx = textureIndex.value();
+        //         for (u32 i = 0; i < swizzle.size(); ++i) {
+        //             channel.texture.channels[i] = swizzle[i];
+        //         }
 
-            bool foundProperty = false;
-            for (auto[propName, swizzle] : properties) {
+        //         foundTexture = true;
+        //         break;
+        //     }
 
-                Vec4 value{ 0.f, 0.f, 0.f, 1.f };
+        //     bool foundProperty = false;
+        //     for (auto[propName, swizzle] : properties) {
 
-                for (u32 i = 0; i < inMaterial->mNumProperties; ++i) {
-                    auto* property = inMaterial->mProperties[i];
-                    if (strcmp(property->mKey.C_Str(), propName))
-                        continue;
+        //         Vec4 value{ 0.f, 0.f, 0.f, 1.f };
 
-                    if (property->mType == aiPropertyTypeInfo::aiPTI_Double) {
-                        for (u32 j = 0; j < property->mDataLength / 8; ++j) {
-                            value[j] = f32(((f64*)property->mData)[j]);
-                        }
-                    } else if (property->mType == aiPropertyTypeInfo::aiPTI_Float) {
-                        for (u32 j = 0; j < property->mDataLength / 4; ++j) {
-                            value[j] = ((f32*)property->mData)[j];
-                        }
-                    } else {
-                        NOVA_THROW("ASSIMP: Property[{}] has invalid type: {}",
-                            property->mKey.C_Str(), u32(property->mType));
-                    }
+        //         for (u32 i = 0; i < inMaterial->mNumProperties; ++i) {
+        //             auto* property = inMaterial->mProperties[i];
+        //             if (strcmp(property->mKey.C_Str(), propName))
+        //                 continue;
 
-                    foundProperty = true;
-                    break;
-                }
+        //             if (property->mType == aiPropertyTypeInfo::aiPTI_Double) {
+        //                 for (u32 j = 0; j < property->mDataLength / 8; ++j) {
+        //                     value[j] = f32(((f64*)property->mData)[j]);
+        //                 }
+        //             } else if (property->mType == aiPropertyTypeInfo::aiPTI_Float) {
+        //                 for (u32 j = 0; j < property->mDataLength / 4; ++j) {
+        //                     value[j] = ((f32*)property->mData)[j];
+        //                 }
+        //             } else {
+        //                 NOVA_THROW("ASSIMP: Property[{}] has invalid type: {}",
+        //                     property->mKey.C_Str(), u32(property->mType));
+        //             }
 
-                if (!foundProperty)
-                    continue;
+        //             foundProperty = true;
+        //             break;
+        //         }
 
-                for (u32 i = 0; i < swizzle.size(); ++i) {
-                    channel.value[i] = value[swizzle[i]];
-                }
+        //         if (!foundProperty)
+        //             continue;
 
-                break;
-            }
+        //         for (u32 i = 0; i < swizzle.size(); ++i) {
+        //             channel.value[i] = value[swizzle[i]];
+        //         }
 
-            if (foundTexture || foundProperty) {
+        //         break;
+        //     }
 
-                outMaterial.channels.push_back(channel);
+        //     if (foundTexture || foundProperty) {
 
-                return true;
-            } else {
-                return false;
-            }
-        };
+        //         outMaterial.properties.push_back(channel);
 
-        addChannel(ChannelType::BaseColor, {
-                { aiTextureType_BASE_COLOR, { 0, 1, 2, 3 } },
-                { aiTextureType_DIFFUSE,    { 0, 1, 2, 3 } },
-            }, {
-                { "$clr.base",    { 0, 1, 2, 3 } },
-                { "$clr.diffuse", { 0, 1, 2, 3 } },
-            });
+        //         return true;
+        //     } else {
+        //         return false;
+        //     }
+        // };
 
-        addChannel(ChannelType::Normal,
-            {{ aiTextureType_NORMALS, { 0, 1, 2 } }},
-            {});
+        // addChannel(ChannelType::BaseColor, {
+        //         { aiTextureType_BASE_COLOR, { 0, 1, 2, 3 } },
+        //         { aiTextureType_DIFFUSE,    { 0, 1, 2, 3 } },
+        //     }, {
+        //         { "$clr.base",    { 0, 1, 2, 3 } },
+        //         { "$clr.diffuse", { 0, 1, 2, 3 } },
+        //     });
 
-        addChannel(ChannelType::Metalness,
-            {{ aiTextureType_METALNESS, { 0 } }},
-            {{ "$mat.metallicFactor",   { 0 } }});
+        // addChannel(ChannelType::Normal,
+        //     {{ aiTextureType_NORMALS, { 0, 1, 2 } }},
+        //     {});
 
-        addChannel(ChannelType::Roughness,
-            {{ aiTextureType_DIFFUSE_ROUGHNESS, { 0 } }},
-            {{ "$mat.roughnessFactor",          { 0 } }});
+        // addChannel(ChannelType::Metalness,
+        //     {{ aiTextureType_METALNESS, { 0 } }},
+        //     {{ "$mat.metallicFactor",   { 0 } }});
 
-        addChannel(ChannelType::Emissive,
-            {{ aiTextureType_EMISSIVE, { 0, 1, 2 } }},
-            {{ "$clr.emissive",        { 0, 1, 2 } }});
+        // addChannel(ChannelType::Roughness,
+        //     {{ aiTextureType_DIFFUSE_ROUGHNESS, { 0 } }},
+        //     {{ "$mat.roughnessFactor",          { 0 } }});
+
+        // addChannel(ChannelType::Emissive,
+        //     {{ aiTextureType_EMISSIVE, { 0, 1, 2 } }},
+        //     {{ "$clr.emissive",        { 0, 1, 2 } }});
     }
 
     void AssimpImporter::ProcessMesh(u32 meshIndex)

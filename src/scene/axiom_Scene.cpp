@@ -56,54 +56,54 @@ namespace axiom
 
         writeHeader("Materials");
 
-        for (auto& material: materials) {
-            NOVA_LOG("Material[{}]", &material - materials.data());
-            if (material.alphaBlend || material.alphaMask) {
-                NOVA_LOG("  Alpha[blend = {}, mask = {}, cutoff = {}]",
-                    material.alphaBlend, material.alphaMask, material.alphaCutoff);
-            }
-            if (material.decal) {
-                NOVA_LOG("  Decal");
-            }
-            if (material.volume) {
-                NOVA_LOG("  Volume");
-            }
-            for (auto& channel : material.channels) {
-                std::cout << "  Channel[" << (&channel - material.channels.data()) << "]";
-                const char* typeName = "Unknown";
-                switch (channel.type) {
-                        using enum ChannelType;
-                    break;case BaseColor:        typeName = "BaseColor";
-                    break;case Alpha:            typeName = "Alpha";
-                    break;case Normal:           typeName = "Normal";
-                    break;case Emissive:         typeName = "Emissive";
-                    break;case Metalness:        typeName = "Metalness";
-                    break;case Roughness:        typeName = "Roughness";
-                    break;case Transmission:     typeName = "Transmission";
-                    break;case Subsurface:       typeName = "Subsurface";
-                    break;case SpecularColor:    typeName = "SpecularColor";
-                    break;case SpecularStrength: typeName = "SpecularStrength";
-                    break;case Specular:         typeName = "Specular";
-                    break;case Glossiness:       typeName = "Glossiness";
-                    break;case Clearcoat:        typeName = "Clearcoat";
-                    break;case Diffuse:          typeName = "Diffuse";
-                    break;case Ior:              typeName = "Ior";
-                }
-                std::cout << ": " << typeName << '\n';
-                if (channel.texture.textureIdx != InvalidIndex) {
-                    std::cout << std::format("    Texture[{}]: (", channel.texture.textureIdx);
-                    for (auto& swizzle : channel.texture.channels) {
-                        if (swizzle == -1) break;
-                        if (&swizzle != channel.texture.channels.data())
-                            std::cout << ", ";
-                        std::cout << i32(swizzle);
-                    }
-                    std::cout << ")\n";
-                }
-                auto v = channel.value;
-                std::cout << std::format("    Value: ({}, {}, {}, {})\n", v.r, v.g, v.b, v.a);
-            }
-        }
+        // for (auto& material: materials) {
+        //     NOVA_LOG("Material[{}]", &material - materials.data());
+        //     if (material.alphaBlend || material.alphaMask) {
+        //         NOVA_LOG("  Alpha[blend = {}, mask = {}, cutoff = {}]",
+        //             material.alphaBlend, material.alphaMask, material.alphaCutoff);
+        //     }
+        //     if (material.decal) {
+        //         NOVA_LOG("  Decal");
+        //     }
+        //     if (material.volume) {
+        //         NOVA_LOG("  Volume");
+        //     }
+        //     for (auto& channel : material.properties) {
+        //         std::cout << "  Channel[" << (&channel - material.properties.data()) << "]";
+        //         const char* typeName = "Unknown";
+        //         switch (channel.type) {
+        //                 using enum ChannelType;
+        //             break;case BaseColor:        typeName = "BaseColor";
+        //             break;case Alpha:            typeName = "Alpha";
+        //             break;case Normal:           typeName = "Normal";
+        //             break;case Emissive:         typeName = "Emissive";
+        //             break;case Metalness:        typeName = "Metalness";
+        //             break;case Roughness:        typeName = "Roughness";
+        //             break;case Transmission:     typeName = "Transmission";
+        //             break;case Subsurface:       typeName = "Subsurface";
+        //             break;case SpecularColor:    typeName = "SpecularColor";
+        //             break;case SpecularStrength: typeName = "SpecularStrength";
+        //             break;case Specular:         typeName = "Specular";
+        //             break;case Glossiness:       typeName = "Glossiness";
+        //             break;case Clearcoat:        typeName = "Clearcoat";
+        //             break;case Diffuse:          typeName = "Diffuse";
+        //             break;case Ior:              typeName = "Ior";
+        //         }
+        //         std::cout << ": " << typeName << '\n';
+        //         if (channel.texture.textureIdx != InvalidIndex) {
+        //             std::cout << std::format("    Texture[{}]: (", channel.texture.textureIdx);
+        //             for (auto& swizzle : channel.texture.channels) {
+        //                 if (swizzle == -1) break;
+        //                 if (&swizzle != channel.texture.channels.data())
+        //                     std::cout << ", ";
+        //                 std::cout << i32(swizzle);
+        //             }
+        //             std::cout << ")\n";
+        //         }
+        //         auto v = channel.value;
+        //         std::cout << std::format("    Value: ({}, {}, {}, {})\n", v.r, v.g, v.b, v.a);
+        //     }
+        // }
 
         writeHeader("Instances");
 

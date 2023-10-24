@@ -115,7 +115,7 @@ vec3 unreal(vec3 x) {
 }
 
 const float saturation_compression = 0.1f;
-const float saturation_boost = 0.3f;
+const float saturation_boost = 0.2f;
 vec3 tone_scale(vec3 color) { return color; }
 
 vec2 create_modified_primary(vec2 input_primary, vec2 white_point, float scaling, float rotation)

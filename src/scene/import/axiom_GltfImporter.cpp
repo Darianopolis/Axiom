@@ -141,44 +141,47 @@ namespace axiom
         auto& inMaterial = asset->materials[matIdx];
         auto& outMaterial = scene.materials[matIdx];
 
-        auto addChannel = [&](
-                ChannelType type,
-                fastgltf::Optional<fastgltf::TextureInfo>& texture,
-                Span<i8> channels,
-                Span<f32> value) {
-            Channel channel{ type };
-            if (texture) {
-                channel.texture.textureIdx = u32(texture->textureIndex);
-                for (u32 i = 0; i < channels.size(); ++i)
-                    channel.texture.channels[i] = channels[i];
-            }
-
-            for (u32 i = 0; i < value.size(); ++i)
-                    channel.value[i] = value[i];
-
-            outMaterial.channels.emplace_back(std::move(channel));
+        auto addProperty = nova::Overloads {
+            [&](std::string_view name, fastgltf::Optional<fastgltf::TextureInfo>& texture) {
+                if (texture) outMaterial.properties.emplace_back(name, TextureSwizzle{ .textureIdx = u32(texture->textureIndex) }); },
+            [&](std::string_view name, fastgltf::Optional<fastgltf::NormalTextureInfo>& texture) {
+                if (texture) outMaterial.properties.emplace_back(name, TextureSwizzle{ .textureIdx = u32(texture->textureIndex) }); },
+            [&](std::string_view name, Span<f32> values) {
+                switch (values.size()) {
+                    break;case 1: outMaterial.properties.emplace_back(name, values[0]);
+                    break;case 2: outMaterial.properties.emplace_back(name, Vec2(values[0], values[1]));
+                    break;case 3: outMaterial.properties.emplace_back(name, Vec3(values[0], values[1], values[2]));
+                    break;case 4: outMaterial.properties.emplace_back(name, Vec4(values[0], values[1], values[2], values[3]));
+                    break;default: NOVA_THROW("Invalid number of values: {}", values.size());
+                }
+            },
+            [&](std::string_view name, f32  scalar) { outMaterial.properties.emplace_back(name, scalar); },
+            [&](std::string_view name, i32  scalar) { outMaterial.properties.emplace_back(name, scalar); },
+            [&](std::string_view name, bool scalar) { outMaterial.properties.emplace_back(name, scalar); },
+            [&](std::string_view name, fastgltf::Optional<f32> scalar) {
+                if (scalar) outMaterial.properties.emplace_back(name, scalar.value()); },
+            [&](std::string_view name, fastgltf::Optional<i32> scalar) {
+                if (scalar) outMaterial.properties.emplace_back(name, scalar.value()); },
+            [&](std::string_view name, fastgltf::Optional<bool> scalar) {
+                if (scalar) outMaterial.properties.emplace_back(name, scalar.value()); },
         };
 
-        auto sum = [&](Span<f32> values) {
-            f32 total = 0.f;
-            for (f32 v : values) total += v;
-            return total;
-        };
+        addProperty(property::BaseColor, inMaterial.pbrData.baseColorTexture);
+        addProperty(property::BaseColor, inMaterial.pbrData.baseColorFactor);
 
-        addChannel(ChannelType::BaseColor, inMaterial.pbrData.baseColorTexture, { 0, 1, 2 }, inMaterial.pbrData.baseColorFactor);
-        if (inMaterial.normalTexture)
-            addChannel(ChannelType::Normal, inMaterial.normalTexture, { 0, 1, 2 }, {});
-        if (inMaterial.emissiveTexture || sum(inMaterial.emissiveFactor) > 0.f)
-            addChannel(ChannelType::Emissive, inMaterial.emissiveTexture, { 0, 1, 2 }, inMaterial.emissiveFactor);
-        addChannel(ChannelType::Metalness, inMaterial.pbrData.metallicRoughnessTexture, { 2 }, { inMaterial.pbrData.metallicFactor });
-        addChannel(ChannelType::Roughness, inMaterial.pbrData.metallicRoughnessTexture, { 1 }, { inMaterial.pbrData.roughnessFactor });
+        addProperty(property::Normal, inMaterial.normalTexture);
 
-        outMaterial.alphaCutoff = inMaterial.alphaCutoff;
-        switch (inMaterial.alphaMode) {
-            using enum fastgltf::AlphaMode;
-            break;case Blend: outMaterial.alphaBlend = true;
-            break;case  Mask: outMaterial.alphaMask  = true;
-        }
+        addProperty(property::Emissive, inMaterial.emissiveTexture);
+        addProperty(property::Emissive, inMaterial.emissiveFactor);
+        addProperty(property::Emissive, inMaterial.emissiveStrength);
+
+        addProperty(property::Metallic , inMaterial.pbrData.metallicRoughnessTexture);
+        addProperty(property::Metallic , inMaterial.pbrData.metallicFactor);
+        addProperty(property::Roughness, inMaterial.pbrData.metallicRoughnessTexture);
+        addProperty(property::Roughness, inMaterial.pbrData.roughnessFactor);
+
+        addProperty(property::AlphaCutoff, inMaterial.alphaCutoff);
+        addProperty(property::AlphaMask  , inMaterial.alphaMode == fastgltf::AlphaMode::Mask);
     }
 
     void GltfImporter::ProcessMesh(u32 gltfMeshIdx, u32 primitiveIndex)

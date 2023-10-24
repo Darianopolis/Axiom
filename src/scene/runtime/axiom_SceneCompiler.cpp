@@ -25,7 +25,8 @@ namespace axiom
             ImageProcess processes = {};
             if (flipNormalMapZ) {
                 for (auto& material : inScene.materials) {
-                    if (material.GetChannel(ChannelType::Normal)->texture.textureIdx == i) {
+                    // TODO: This should follow the mapping process
+                    if (auto p = material.GetProperty<TextureSwizzle>(property::Normal); p && p->textureIdx == i) {
                         processes |= ImageProcess::FlipNrmZ;
                         break;
                     }
@@ -41,7 +42,8 @@ namespace axiom
                     path.replace_extension(".png");
                 }
                 if (!std::filesystem::exists(path)) {
-                    NOVA_THROW("Cannot find file: {}", path.string());
+                    NOVA_LOG("Cannot find file: {}", path.string());
+                    continue;
                 }
                 path = std::filesystem::canonical(path);
                 s_ImageProcessor.ProcessImage(path.string().c_str(), 0, ImageType::ColorAlpha, MaxDim, processes);
@@ -91,72 +93,84 @@ namespace axiom
         outScene.textures.emplace_back(defaultMaterial->transmission);
 
         nova::HashMap<u32, u32> singlePixelTextures;
-        auto getImage = [&](Channel* channel, u32 fallback) {
-
-            if (!channel) {
-                // NOVA_LOG("MISSING CHANNEL - FALLBACK");
-                return outScene.textures[fallback];
-            }
-
-            if (channel->texture.textureIdx != InvalidIndex) {
-                // NOVA_LOG("Using texture");
-                return outScene.textures[textureOffset + channel->texture.textureIdx];
-            }
-
-            // NOVA_LOG("Using fallback!");
-
-            std::array<u8, 4> data {
-                u8(channel->value.r * 255.f),
-                u8(channel->value.g * 255.f),
-                u8(channel->value.b * 255.f),
-                u8(channel->value.a * 255.f),
-            };
-
-            u32 encoded = std::bit_cast<u32>(data);
-
-            if (singlePixelTextures.contains(encoded)) {
-                return outScene.textures[singlePixelTextures.at(encoded)];
-            }
-
-            auto image = Ref<UVTexture>::Create();
-            image->size = Vec2(1);
-            image->data = { b8(data[0]), b8(data[1]), b8(data[2]), b8(data[3]) };
-
-            outScene.textures.push_back(image);
-            singlePixelTextures.insert({ encoded, u32(outScene.textures.size() - 1) });
-
-            return image;
-        };
 
         u32 materialOffset = u32(outScene.materials.size());
         for (auto& inMaterial : inScene.materials) {
             auto outMaterial = Ref<UVMaterial>::Create();
             outScene.materials.push_back(outMaterial);
 
-            auto* baseColor = inMaterial.GetChannel(ChannelType::BaseColor);
-            [[maybe_unused]] auto* alpha = inMaterial.GetChannel(ChannelType::Alpha);
-            outMaterial->baseColor_alpha = getImage(baseColor, defaultBaseColorAlpha);
+            auto getImage = [&](std::string_view property, u32 fallback) {
 
-            auto* normal = inMaterial.GetChannel(ChannelType::Normal);
-            outMaterial->normals = getImage(normal, defaultNormal);
+                auto* texture = inMaterial.GetProperty<TextureSwizzle>(property);
 
-            auto* metalness = inMaterial.GetChannel(ChannelType::Metalness);
-            [[maybe_unused]] auto* roughness = inMaterial.GetChannel(ChannelType::Roughness);
-            outMaterial->metalness_roughness = getImage(metalness, defaultMetalnessRoughness);
+                if (texture) {
+                    auto tex = outScene.textures[textureOffset + texture->textureIdx];
+                    if (tex->data.size()) {
+                        return tex;
+                    }
+                }
 
-            auto* emissivity = inMaterial.GetChannel(ChannelType::Emissive);
-            outMaterial->emissivity = getImage(emissivity, defaultEmissivity);
+                // NOVA_LOG("Using fallback!");
 
-            auto* transmission = inMaterial.GetChannel(ChannelType::Transmission);
-            outMaterial->transmission = getImage(transmission, defaultTransmission);
+                std::array<u8, 4> data {
+                    0, 0, 0, 255,
+                    // u8(channel->value.r * 255.f),
+                    // u8(channel->value.g * 255.f),
+                    // u8(channel->value.b * 255.f),
+                    // u8(channel->value.a * 255.f),
+                };
 
-            outMaterial->alphaBlend = inMaterial.alphaBlend;
-            outMaterial->alphaMask = inMaterial.alphaMask || (
-                baseColor->texture.textureIdx != InvalidIndex
-                && outScene.textures[baseColor->texture.textureIdx]->minAlpha < inMaterial.alphaCutoff);
-            outMaterial->alphaCutoff = inMaterial.alphaCutoff;
-            outMaterial->decal = inMaterial.decal;
+                if (Vec4* v4 = inMaterial.GetProperty<Vec4>(property)) {
+                    data[0] = u8(v4->r * 255.f);
+                    data[1] = u8(v4->g * 255.f);
+                    data[2] = u8(v4->b * 255.f);
+                    data[3] = u8(v4->a * 255.f);
+                } else if (Vec3* v3 = inMaterial.GetProperty<Vec3>(property)) {
+                    data[0] = u8(v3->r * 255.f);
+                    data[1] = u8(v3->g * 255.f);
+                    data[2] = u8(v3->b * 255.f);
+                } else if (Vec2* v2 = inMaterial.GetProperty<Vec2>(property)) {
+                    data[0] = u8(v2->r * 255.f);
+                    data[1] = u8(v2->g * 255.f);
+                } else if (f32* v = inMaterial.GetProperty<f32>(property)) {
+                    data[0] = u8(*v * 255.f);
+                } else {
+                    return outScene.textures[fallback];
+                }
+
+                u32 encoded = std::bit_cast<u32>(data);
+
+                if (singlePixelTextures.contains(encoded)) {
+                    return outScene.textures[singlePixelTextures.at(encoded)];
+                }
+
+                auto image = Ref<UVTexture>::Create();
+                image->size = Vec2(1);
+                image->data = { b8(data[0]), b8(data[1]), b8(data[2]), b8(data[3]) };
+
+                outScene.textures.push_back(image);
+                singlePixelTextures.insert({ encoded, u32(outScene.textures.size() - 1) });
+
+                return image;
+            };
+
+            // TODO: Channel remapping!
+
+            outMaterial->baseColor_alpha = getImage(property::BaseColor, defaultBaseColorAlpha);
+            outMaterial->normals = getImage(property::Normal, defaultNormal);
+            outMaterial->metalness_roughness = getImage(property::Metallic, defaultMetalnessRoughness);
+            outMaterial->emissivity = getImage(property::Emissive, defaultEmissivity);
+            outMaterial->transmission = getImage("", defaultTransmission);
+
+            outMaterial->alphaCutoff = [](f32*v){return v?*v:0.5f;}(inMaterial.GetProperty<f32>(property::AlphaCutoff));
+
+            // outMaterial->alphaBlend = inMaterial.alphaBlend;
+            outMaterial->alphaMask = inMaterial.GetProperty<bool>(property::AlphaMask) ||
+                outMaterial->baseColor_alpha->minAlpha < outMaterial->alphaCutoff;
+            // outMaterial->decal = inMaterial.decal;
         }
+
+        std::to_chars(nullptr, nullptr, 1234);
 
         u32 meshOffset = u32(outScene.meshes.size());
         for (auto& inMesh : inScene.meshes) {

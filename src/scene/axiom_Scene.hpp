@@ -41,52 +41,56 @@ namespace axiom
         std::array<i8, 4> channels{ -1, -1, -1, -1 };
     };
 
-    enum class ChannelType
-    {
-        BaseColor,
-        Alpha,
-        Normal,
-        Emissive,
-        Metalness,
-        Roughness,
-        Transmission,
-        Subsurface,
-        SpecularColor,
-        SpecularStrength,
-        Specular,
-        Glossiness,
-        Clearcoat,
-        Diffuse,
-        Ior,
-    };
+    namespace property {
+        constexpr std::string_view BaseColor     = "base_color"sv;
+        constexpr std::string_view Alpha         = "alpha"sv;
+        constexpr std::string_view Normal        = "normal"sv;
+        constexpr std::string_view Emissive      = "emissive"sv;
+        constexpr std::string_view Metallic      = "metallic"sv;
+        constexpr std::string_view Roughness     = "roughness"sv;
+        constexpr std::string_view AlphaCutoff   = "alpha_cutoff"sv;
+        constexpr std::string_view AlphaMask     = "alpha_blend"sv;
+        constexpr std::string_view SpecularColor = "specular_color"sv;
+        constexpr std::string_view Specular      = "specular"sv;
+    }
 
-    struct Channel
+    using PropertyValue = std::variant<
+        TextureSwizzle,
+        bool,
+        i32,
+        f32,
+        Vec2,
+        Vec3,
+        Vec4>;
+
+    struct Property
     {
-        ChannelType       type;
-        TextureSwizzle texture;
-        Vec4             value{ 0.f, 0.f, 0.f, 1.f };
+        std::string_view name;
+        PropertyValue   value;
     };
 
     struct Material
     {
-        std::vector<Channel> channels;
+        std::vector<Property> properties;
 
-        Channel* GetChannel(ChannelType type)
+        template<class ValueT>
+        ValueT* GetProperty(std::string_view type)
         {
-            for (auto& channel : channels) {
-                if (channel.type == type) {
-                    return &channel;
+            for (auto& property : properties) {
+                if (property.name == type
+                        && std::holds_alternative<ValueT>(property.value)) {
+                    return &std::get<ValueT>(property.value);
                 }
             }
 
             return nullptr;
         }
 
-        f32 alphaCutoff = 0.5f;
-        bool  alphaMask = false;
-        bool alphaBlend = false;
-        bool     volume = false;
-        bool      decal = false;
+        // f32 alphaCutoff = 0.5f;
+        // bool  alphaMask = false;
+        // bool alphaBlend = false;
+        // bool     volume = false;
+        // bool      decal = false;
     };
 
     struct Mesh

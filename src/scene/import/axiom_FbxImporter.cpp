@@ -81,41 +81,35 @@ namespace axiom
 
         materialIndices[inMaterial] = matIdx;
 
-        auto addChannel = [&](
-                ChannelType type,
-                const ufbx_material_map& map,
-                Span<i8> channels) {
+        auto addProperty = [&](
+                std::string_view name,
+                const ufbx_material_map& map) {
 
-            if (!map.has_value && !map.texture_enabled) {
-                return;
-            }
-
-            Channel channel{ type };
             if (map.texture_enabled && map.texture) {
-                channel.texture.textureIdx = u32(textureIndices[map.texture]);
-                for (u32 i = 0; i < channels.size(); ++i)
-                    channel.texture.channels[i] = channels[i];
+                outMaterial.properties.emplace_back(name, TextureSwizzle{ .textureIdx = u32(textureIndices[map.texture]) });
             }
 
-            for (u32 i = 0; i < channels.size(); ++i)
-                channel.value[i] = f32(reinterpret_cast<const f64*>(&map.value_vec4)[channels[i]]);
-
-            outMaterial.channels.emplace_back(std::move(channel));
+            if (map.has_value) {
+                switch (map.value_components) {
+                    break;case 1: outMaterial.properties.emplace_back(name, f32(map.value_real));
+                    break;case 2: outMaterial.properties.emplace_back(name, Vec2(f32(map.value_vec2.x), f32(map.value_vec2.y)));
+                    break;case 3: outMaterial.properties.emplace_back(name, Vec3(f32(map.value_vec3.x), f32(map.value_vec3.y), f32(map.value_vec3.z)));
+                    break;case 4: outMaterial.properties.emplace_back(name, Vec4(f32(map.value_vec4.x), f32(map.value_vec4.y), f32(map.value_vec4.z), f32(map.value_vec4.w)));
+                    break;default: NOVA_THROW("Invalid number of value components: {}", map.value_components);
+                }
+            }
         };
 
-        addChannel(ChannelType::BaseColor, inMaterial->pbr.base_color, { 0, 1, 2, 3 });
-        addChannel(ChannelType::Normal, inMaterial->fbx.normal_map, { 0, 1, 2 });
-        addChannel(ChannelType::Emissive, inMaterial->pbr.emission_color, { 0, 1, 2 });
+        addProperty(property::BaseColor, inMaterial->pbr.base_color);
+        addProperty(property::Normal,    inMaterial->fbx.normal_map);
+        addProperty(property::Emissive,  inMaterial->pbr.emission_color);
 
-        // TODO: This needs to be handled per-model
-        addChannel(ChannelType::Metalness, inMaterial->pbr.specular_color, { 2 });
-        addChannel(ChannelType::Roughness, inMaterial->pbr.specular_color, { 1 });
+        addProperty(property::Metallic,  inMaterial->pbr.metalness);
+        addProperty(property::Roughness, inMaterial->pbr.roughness);
 
-        // addChannel(ChannelType::Specular, inMaterial->fbx.specular_color, { 0, 1, 2 });
-        // addChannel(ChannelType::Metalness, inMaterial->pbr.metalness, { 0 });
-        // addChannel(ChannelType::Roughness, inMaterial->pbr.roughness, { 0 });
+        addProperty(property::SpecularColor, inMaterial->fbx.specular_color);
 
-        outMaterial.alphaMask = inMaterial->features.opacity.enabled;
+        outMaterial.properties.emplace_back(property::AlphaMask, inMaterial->features.opacity.enabled);
     }
 
     void FbxImporter::ProcessMesh(u32 fbxMeshIdx, u32 primIdx)

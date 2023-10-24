@@ -182,21 +182,23 @@ namespace axiom
             auto& texture = scene->textures[i];
             auto& loadedTexture = loadedTextures.at(texture.Raw());
 
-            loadedTexture.texture = nova::Texture::Create(context,
-                Vec3U(texture->size, 0),
-                nova::TextureUsage::Sampled,
-                texture->format,
-                {});
+            if (texture->data.size()) {
+                loadedTexture.texture = nova::Texture::Create(context,
+                    Vec3U(texture->size, 0),
+                    nova::TextureUsage::Sampled,
+                    texture->format,
+                    {});
 
-            loadedTexture.texture.Set({}, loadedTexture.texture.GetExtent(),
-                texture->data.data());
+                loadedTexture.texture.Set({}, loadedTexture.texture.GetExtent(),
+                    texture->data.data());
 
-            totalResidentTextures += texture->data.size();
+                totalResidentTextures += texture->data.size();
 
 #pragma omp critical
-            {
-                loadedTexture.handle = heapSlots->Acquire();
-                heap.WriteSampledTexture(loadedTexture.handle, loadedTexture.texture);
+                {
+                    loadedTexture.handle = heapSlots->Acquire();
+                    heap.WriteSampledTexture(loadedTexture.handle, loadedTexture.texture);
+                }
             }
         }
 
