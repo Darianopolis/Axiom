@@ -1,0 +1,68 @@
+TODO:
+
+Improved culling
+  1) vizbuffer pass visible list (empty on frame 0)
+  2a) representative raster remaining object AABBs against depth
+    and/or
+  2b) build hzb and AABB test against that
+  3) vizbuffer pass surviving objects
+  4) shade vizbuffer and ballot for next frame
+
+Build "generic" renderer framework
+  - Dynamic first
+  - All objects should be pushed into scene dynamically
+  - Must be removable
+  - Streamable textures / geometry
+  - Only runtime format, leave import as completely separate project
+
+struct geometry
+{
+    vector<vec3>            position_attributes;
+    vector<shading_attribs> shading_attributes;
+    vector<bone_attribs>    bone_attributes;
+    vector<u32>             indices;
+};
+
+struct material
+{
+    index<texture> albedo_alpha;
+    index<texture> metalness_roughness;
+    index<texture> normal;
+    index<texture> emission;
+    index<texture> transmission;
+
+    f32 ior;
+    f32 alpha_cutoff;
+};
+
+struct mesh
+{
+    index<geometry>       geometry;
+    u32                   vertex_offset;
+    u32                   first_index;
+    u32                   triangle_count;
+    index<material>       material;
+    index<transform_node> transform;
+    aabb3                 bounding_box;
+};
+
+struct transform_node
+{
+    mat4x3           transform;
+    index<transform> parent;
+};
+
+struct texture
+{
+    vec2u        size;
+    u32          mips;
+    format       format;
+    vector<byte> data;
+};
+
+struct renderer
+{
+    vector<geometry>       geometries;
+    vector<mesh>           meshes;
+    vector<transform_node> transform_nodes;
+};

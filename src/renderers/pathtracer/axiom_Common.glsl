@@ -5,9 +5,9 @@
 #extension GL_EXT_shader_explicit_arithmetic_types_int8  : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 
-layout(set = 0, binding = 0) uniform image2D RWImage2D[];
 layout(set = 0, binding = 0) uniform texture2D Image2D[];
-layout(set = 0, binding = 0) uniform sampler   Sampler[];
+layout(set = 0, binding = 1) uniform image2D RWImage2D[];
+layout(set = 0, binding = 2) uniform sampler   Sampler[];
 
 float PI = 3.14159265358979323846264338327950288419716939937510;
 

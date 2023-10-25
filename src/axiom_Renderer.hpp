@@ -34,12 +34,12 @@ namespace axiom
 
         virtual void ResetSamples() = 0;
         virtual void SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov) = 0;
-        virtual void Record(nova::CommandList cmd, nova::Texture target, u32 targetIdx) = 0;
+        virtual void Record(nova::CommandList cmd, nova::Texture target) = 0;
     };
 
     inline
     Renderer::~Renderer() {}
 
-    nova::Ref<Renderer> CreateRasterRenderer(nova::Context context, nova::DescriptorHeap heap, nova::IndexFreeList* heapSlots);
-    nova::Ref<Renderer> CreatePathTraceRenderer(nova::Context context, nova::DescriptorHeap heap, nova::IndexFreeList* heapSlots);
+    nova::Ref<Renderer> CreateRasterRenderer(nova::Context context);
+    nova::Ref<Renderer> CreatePathTraceRenderer(nova::Context context);
 }

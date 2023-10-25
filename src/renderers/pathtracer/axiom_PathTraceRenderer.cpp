@@ -17,19 +17,13 @@ namespace axiom
         nova::AccelerationStructure blas;
     };
 
-    struct LoadedTexture
-    {
-        nova::Texture         texture;
-        nova::DescriptorHandle handle;
-    };
-
     struct GPU_Material
     {
-        nova::DescriptorHandle     baseColor_alpha;
-        nova::DescriptorHandle             normals;
-        nova::DescriptorHandle          emissivity;
-        nova::DescriptorHandle        transmission;
-        nova::DescriptorHandle metalness_roughness;
+        u32     baseColor_alpha;
+        u32             normals;
+        u32          emissivity;
+        u32        transmission;
+        u32 metalness_roughness;
 
         f32 alphaCutoff = 0.5f;
         bool  alphaMask = false;
@@ -55,21 +49,17 @@ namespace axiom
         CompiledScene* scene = nullptr;
 
         nova::Context          context;
-        nova::DescriptorHeap      heap;
-        nova::IndexFreeList* heapSlots;
 
         nova::AccelerationStructure tlas;
 
         nova::Sampler             linearSampler;
-        nova::DescriptorHandle linearSamplerIdx;
 
         nova::Texture             accumulationTarget;
-        nova::DescriptorHandle accumulationTargetIdx;
         u32                              sampleCount;
 
         nova::Buffer                        materialBuffer;
         nova::HashMap<void*, u64>        materialAddresses;
-        nova::HashMap<void*, LoadedTexture> loadedTextures;
+        nova::HashMap<void*, nova::Texture> loadedTextures;
 
         nova::Buffer        shadingAttributesBuffer;
         nova::Buffer                    indexBuffer;
@@ -105,22 +95,16 @@ namespace axiom
         virtual void CompileScene(CompiledScene& scene, nova::CommandPool cmdPool, nova::Fence fence);
 
         virtual void SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov);
-        virtual void Record(nova::CommandList cmd, nova::Texture target, u32 targetIdx);
+        virtual void Record(nova::CommandList cmd, nova::Texture target);
         virtual void ResetSamples();
     };
 
-    nova::Ref<Renderer> CreatePathTraceRenderer(nova::Context context, nova::DescriptorHeap heap, nova::IndexFreeList* heapSlots)
+    nova::Ref<Renderer> CreatePathTraceRenderer(nova::Context context)
     {
         auto renderer = nova::Ref<PathTraceRenderer>::Create();
         renderer->context = context;
-        renderer->heap = heap;
-        renderer->heapSlots = heapSlots;
 
         renderer->linearSampler = nova::Sampler::Create(context, nova::Filter::Linear, nova::AddressMode::Repeat, nova::BorderColor::TransparentBlack, 16.f);
-        renderer->linearSamplerIdx = heapSlots->Acquire();
-        heap.WriteSampler(renderer->linearSamplerIdx, renderer->linearSampler);
-
-        renderer->accumulationTargetIdx = heapSlots->Acquire();
 
         renderer->noiseBuffer = nova::Buffer::Create(context, 0, nova::BufferUsage::Storage,
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
@@ -155,14 +139,16 @@ namespace axiom
 
         materialBuffer.Destroy();
         for (auto&[p, texture] : loadedTextures) {
-            texture.texture.Destroy();
-            heapSlots->Release(texture.handle.id);
+            texture.Destroy();
         }
 
         anyHitShader.Destroy();
         closestHitShader.Destroy();
         rayGenShader.Destroy();
+        postProcessShader.Destroy();
         pipeline.Destroy();
+
+        linearSampler.Destroy();
 
         accumulationTarget.Destroy();
     }
@@ -183,22 +169,16 @@ namespace axiom
             auto& loadedTexture = loadedTextures.at(texture.Raw());
 
             if (texture->data.size()) {
-                loadedTexture.texture = nova::Texture::Create(context,
+                loadedTexture = nova::Texture::Create(context,
                     Vec3U(texture->size, 0),
                     nova::TextureUsage::Sampled,
                     texture->format,
                     {});
 
-                loadedTexture.texture.Set({}, loadedTexture.texture.GetExtent(),
+                loadedTexture.Set({}, loadedTexture.GetExtent(),
                     texture->data.data());
 
                 totalResidentTextures += texture->data.size();
-
-#pragma omp critical
-                {
-                    loadedTexture.handle = heapSlots->Acquire();
-                    heap.WriteSampledTexture(loadedTexture.handle, loadedTexture.texture);
-                }
             }
         }
 
@@ -216,11 +196,11 @@ namespace axiom
             materialAddresses[material.Raw()] = address;
 
             materialBuffer.Set<GPU_Material>({{
-                .baseColor_alpha     = loadedTextures.at(material->baseColor_alpha.Raw()    ).handle,
-                .normals             = loadedTextures.at(material->normals.Raw()            ).handle,
-                .emissivity          = loadedTextures.at(material->emissivity.Raw()         ).handle,
-                .transmission        = loadedTextures.at(material->transmission.Raw()       ).handle,
-                .metalness_roughness = loadedTextures.at(material->metalness_roughness.Raw()).handle,
+                .baseColor_alpha     = loadedTextures.at(material->baseColor_alpha.Raw()    ).GetDescriptor(),
+                .normals             = loadedTextures.at(material->normals.Raw()            ).GetDescriptor(),
+                .emissivity          = loadedTextures.at(material->emissivity.Raw()         ).GetDescriptor(),
+                .transmission        = loadedTextures.at(material->transmission.Raw()       ).GetDescriptor(),
+                .metalness_roughness = loadedTextures.at(material->metalness_roughness.Raw()).GetDescriptor(),
 
                 .alphaCutoff = material->alphaCutoff,
                 .alphaMask   = material->alphaMask,
@@ -507,7 +487,7 @@ namespace axiom
         }
     }
 
-    void PathTraceRenderer::Record(nova::CommandList cmd, nova::Texture target, u32 targetIdx)
+    void PathTraceRenderer::Record(nova::CommandList cmd, nova::Texture target)
     {
         auto size = target.GetExtent();
 
@@ -522,7 +502,6 @@ namespace axiom
                 {});
 
             accumulationTarget.Transition(nova::TextureLayout::GeneralImage);
-            heap.WriteStorageTexture(accumulationTargetIdx, accumulationTarget);
 
             sampleCount = 0;
         }
@@ -548,14 +527,14 @@ namespace axiom
             u64  instances;
             u64  noiseSeed;
 
-            nova::DescriptorHandle target;
+            u32 target;
 
             Vec3       pos;
             Vec3      camX;
             Vec3      camY;
             f32 camZOffset;
 
-            nova::DescriptorHandle linearSampler;
+            u32 linearSampler;
 
             u32 sampleCount;
 
@@ -574,12 +553,12 @@ namespace axiom
             .geometries = geometryInfoBuffer.GetAddress(),
             .instances = instanceDataBuffer.GetAddress(),
             .noiseSeed = noiseBuffer.GetAddress(),
-            .target = accumulationTargetIdx,
+            .target = accumulationTarget.GetDescriptor(),
             .pos = viewPos,
             .camX = viewRot * Vec3(1.f, 0.f, 0.f),
             .camY = viewRot * Vec3(0.f, 1.f, 0.f),
             .camZOffset = 1.f / glm::tan(0.5f * viewFov),
-            .linearSampler = linearSamplerIdx,
+            .linearSampler = linearSampler.GetDescriptor(),
             .sampleCount = sampleCount,
             .jitter = jitter,
             .sampleRadius = sampleRadius,
@@ -593,17 +572,17 @@ namespace axiom
 
         struct PC_PostProcess
         {
-            Vec2U                    size;
-            nova::DescriptorHandle source;
-            nova::DescriptorHandle target;
-            f32                  exposure;
-            u32                      mode;
+            Vec2U   size;
+            u32   source;
+            u32   target;
+            f32 exposure;
+            u32     mode;
         };
 
         cmd.PushConstants(PC_PostProcess {
             .size = Vec2U(target.GetExtent()),
-            .source = accumulationTargetIdx,
-            .target = targetIdx,
+            .source = accumulationTarget.GetDescriptor(),
+            .target = target.GetDescriptor(),
             .exposure = exposure,
             .mode = u32(mode),
         });

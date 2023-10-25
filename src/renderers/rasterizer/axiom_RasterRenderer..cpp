@@ -3,6 +3,11 @@
 #include <nova/core/nova_SubAllocation.hpp>
 #include <nova/rhi/vulkan/glsl/nova_VulkanGlsl.hpp>
 
+#ifndef VK_NO_PROTOTYPES
+#  define VK_NO_PROTOTYPES
+#endif
+#include <vulkan/vulkan.h>
+
 namespace axiom
 {
     static Mat4 ProjInfReversedZRH(f32 fovY, f32 aspectWbyH, f32 zNear)
@@ -51,15 +56,13 @@ namespace axiom
         virtual void CompileScene(CompiledScene& scene, nova::CommandPool cmdPool, nova::Fence fence);
 
         virtual void SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov);
-        virtual void Record(nova::CommandList cmd, nova::Texture target, u32 targetIdx);
+        virtual void Record(nova::CommandList cmd, nova::Texture target);
 
         virtual void ResetSamples() {}
     };
 
-    nova::Ref<Renderer> CreateRasterRenderer(nova::Context context, nova::DescriptorHeap heap, nova::IndexFreeList* heapSlots)
+    nova::Ref<Renderer> CreateRasterRenderer(nova::Context context)
     {
-        (void)heap, (void)heapSlots;
-
         auto renderer = nova::Ref<RasterRenderer>::Create();
         renderer->context = context;
         return renderer;
@@ -171,10 +174,8 @@ namespace axiom
         viewProj = proj * view;
     }
 
-    void RasterRenderer::Record(nova::CommandList cmd, nova::Texture target, u32 targetIdx)
+    void RasterRenderer::Record(nova::CommandList cmd, nova::Texture target)
     {
-        (void)targetIdx;
-
         if (!depthImage || depthImage.GetExtent() != target.GetExtent()) {
             depthImage.Destroy();
 
