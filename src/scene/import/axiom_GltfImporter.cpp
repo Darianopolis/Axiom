@@ -202,29 +202,25 @@ namespace axiom
         // Indices
         auto& indices = asset->accessors[primitive.indicesAccessor.value()];
         outMesh.indices.resize(indices.count);
-        fastgltf::iterateAccessorWithIndex<u32>(*asset, indices,
-            [&](u32 vIndex, usz iIndex) { outMesh.indices[iIndex] = vIndex; });
+        fastgltf::copyFromAccessor<u32>(*asset, indices, outMesh.indices.data());
 
         // Positions
         auto& positions = asset->accessors[primitive.findAttribute("POSITION")->second];
         outMesh.positions.resize(positions.count);
-        fastgltf::iterateAccessorWithIndex<Vec3>(*asset, positions,
-            [&](Vec3 pos, usz index) { outMesh.positions[index] = pos; });
+        fastgltf::copyFromAccessor<Vec3>(*asset, positions, outMesh.positions.data());
 
         // Normals
         if (auto normals = primitive.findAttribute("NORMAL"); normals != primitive.attributes.end()) {
             auto& accessor = asset->accessors[normals->second];
             outMesh.normals.resize(accessor.count);
-            fastgltf::iterateAccessorWithIndex<Vec3>(*asset, accessor,
-                [&](Vec3 normal, usz i) { outMesh.normals[i] = normal; });
+            fastgltf::copyFromAccessor<Vec3>(*asset, accessor, outMesh.normals.data());
         }
 
         // TexCoords (0)
         if (auto texCoords = primitive.findAttribute("TEXCOORD_0"); texCoords != primitive.attributes.end()) {
             auto& accessor = asset->accessors[texCoords->second];
             outMesh.texCoords.resize(accessor.count);
-            fastgltf::iterateAccessorWithIndex<Vec2>(*asset, accessor,
-                [&](Vec2 texCoord, usz i) { outMesh.texCoords[i] = texCoord; });
+            fastgltf::copyFromAccessor<Vec2>(*asset, accessor, outMesh.texCoords.data());
         }
     }
 

@@ -223,6 +223,9 @@ int main(int argc, char* argv[])
     // auto start = std::chrono::steady_clock::now();
     u64 frames = 0;
     f32 fps = 0.f;
+    i64 allocatedMem = 0;
+    i64 allocationCountActive = 0;
+    i64 allocationCountRate = 0;
 
     POINT savedPos{ 0, 0 };
     bool lastMouseDrag = false;
@@ -300,6 +303,10 @@ int main(int argc, char* argv[])
             // fps = (frames - 1000) / duration_cast<duration<f32>>(now - start).count();
             lastReportTime = now;
             frames = 0;
+
+            allocatedMem = nova::rhi::stats::MemoryAllocated.load();
+            allocationCountActive = nova::rhi::stats::AllocationCount.load();
+            allocationCountRate = nova::rhi::stats::NewAllocationCount.exchange(0);
         }
 
         // if (frames < 1000) {
@@ -375,6 +382,7 @@ int main(int argc, char* argv[])
             ImGui::Begin("Settings");
             NOVA_CLEANUP(&) { ImGui::End(); };
 
+            ImGui::Text("Allocations: Mem = %s, Active = %i (%i / s)", nova::ByteSizeToString(allocatedMem).c_str(), allocationCountActive, allocationCountRate);
             ImGui::Text("Frametime: %s (%.2f fps)", nova::DurationToString(1s / fps).c_str(), fps);
             ImGui::Text("Position: (%.2f, %.2f, %.2f)", position.x, position.y, position.z);
             ImGui::Text("Rotation: (%.2f, %.2f, %.2f, %.2f)", rotation.x, rotation.y, rotation.z, rotation.w);
