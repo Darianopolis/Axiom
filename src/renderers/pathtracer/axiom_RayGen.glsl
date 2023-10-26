@@ -415,51 +415,43 @@ void main()
             color += throughput * emissivity;
 
             if (roughness > 0.0) {
-                if (roughness > 0.0) {
-                    // BRDF
+                // BRDF
 
-                    if (RandomUNorm() > 0.5)
-                    {
-                        vec3 sampleDir = RandomOnCone(SunDir, SunCosTheta);
-                        // if (IsUnobstructed(OffsetPointByNormal(pos, flatNrm), sampleDir, 8000000.0)) {
-                        if (IsUnobstructed(pos + flatNrm * 0.01, sampleDir, 8000000.0)) {
-                            color += throughput * SunIntensity *
-                                CookTorranceBrdf(nrm, -dir, sampleDir, baseColor, roughness, metalness, 1.5, true);
-                        }
-
-                        break;
+                if (RandomUNorm() > 0.5)
+                {
+                    vec3 sampleDir = RandomOnCone(SunDir, SunCosTheta);
+                    if (IsUnobstructed(OffsetPointByNormal(pos, flatNrm), sampleDir, 8000000.0)) {
+                        color += throughput * SunIntensity *
+                            CookTorranceBrdf(nrm, -dir, sampleDir, baseColor, roughness, metalness, 1.5, true);
                     }
-                    else
-                    {
-                        // bool flip = RandomUNorm() > 0.5;
-                        // if (flip) {
-                        //     nrm = -nrm;
-                        //     flatNrm = -flatNrm;
-                        // }
 
-                        vec3 L = CosineSampleHemisphere();
-                        float pdf = CosineSampleHemispherePDF(L.z);
-                        L = ChangeBasis(L, nrm);
-                        pdf = clamp(pdf, 0.01, 10000);
-                        roughness = max(0.04, roughness);
-
-                        vec3 brdf = 2.0 * CookTorranceBrdf(nrm, -dir, L, baseColor, roughness, metalness, 1.5, true);
-                        throughput *= brdf * max(dot(nrm, L), 0.0) / pdf;
-                        dir = L;
-                        origin = OffsetPointByNormal(pos, flatNrm);
-                    }
+                    break;
                 }
-                else {
+                else
+                {
+                    // bool flip = RandomUNorm() > 0.5;
+                    // if (flip) {
+                    //     nrm = -nrm;
+                    //     flatNrm = -flatNrm;
+                    // }
+
+                    vec3 L = CosineSampleHemisphere();
+                    float pdf = CosineSampleHemispherePDF(L.z);
+                    L = ChangeBasis(L, nrm);
+                    pdf = clamp(pdf, 0.01, 10000);
+                    roughness = max(0.04, roughness);
+
+                    vec3 brdf = 2.0 * CookTorranceBrdf(nrm, -dir, L, baseColor, roughness, metalness, 1.5, true);
+                    throughput *= brdf * max(dot(nrm, L), 0.0) / pdf;
+                    dir = L;
                     origin = OffsetPointByNormal(pos, flatNrm);
-                    dir = reflect(dir, nrm);
-                    throughput *= baseColor;
                 }
-            } else {
+            }
+            else {
                 origin = OffsetPointByNormal(pos, flatNrm);
                 dir = reflect(dir, nrm);
                 throughput *= baseColor;
             }
-
         }
     }
 

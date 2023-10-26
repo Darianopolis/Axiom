@@ -211,7 +211,6 @@ int main(int argc, char* argv[])
 
     auto lastUpdateTime = std::chrono::steady_clock::now();
     auto lastReportTime = lastUpdateTime;
-    // auto start = std::chrono::steady_clock::now();
     u64 frames = 0;
     f32 fps = 0.f;
     i64 allocatedMem = 0;
@@ -289,7 +288,6 @@ int main(int argc, char* argv[])
         if (now - lastReportTime > 1s)
         {
             fps = frames / duration_cast<duration<f32>>(now - lastReportTime).count();
-            // fps = (frames - 1000) / duration_cast<duration<f32>>(now - start).count();
             lastReportTime = now;
             frames = 0;
 
@@ -297,11 +295,6 @@ int main(int argc, char* argv[])
             allocationCountActive = nova::rhi::stats::AllocationCount.load();
             allocationCountRate = nova::rhi::stats::NewAllocationCount.exchange(0);
         }
-
-        // if (frames < 1000) {
-        //     fps = 0;
-        //     start = now;
-        // }
 
         // Camera
 

@@ -3,7 +3,6 @@
 #include <scene/axiom_Scene.hpp>
 
 // TODO:
-// #define UFBX_REAL_IS_FLOAT
 #include <ufbx.h>
 
 namespace axiom
@@ -30,7 +29,6 @@ namespace axiom
 NOVA_MEMORY_HASH(axiom::FbxVertex);
 namespace axiom
 {
-
     struct FbxImporter
     {
         ufbx_scene* fbx = nullptr;

@@ -17,52 +17,53 @@ Build "generic" renderer framework
 
 struct geometry
 {
-    vector<vec3>            position_attributes;
-    vector<shading_attribs> shading_attributes;
-    vector<bone_attribs>    bone_attributes;
-    vector<u32>             indices;
+  vector<vec3>            position_attributes;
+  vector<shading_attribs> shading_attributes;
+  vector<bone_attribs>    bone_attributes;
+  vector<u32>             indices;
 };
 
 struct material
 {
-    index<texture> albedo_alpha;
-    index<texture> metalness_roughness;
-    index<texture> normal;
-    index<texture> emission;
-    index<texture> transmission;
+  index<texture> albedo_alpha;
+  index<texture> metalness_roughness;
+  index<texture> normal;
+  index<texture> emission;
+  index<texture> transmission;
 
-    f32 ior;
-    f32 alpha_cutoff;
+  f32 ior;
+  f32 alpha_cutoff;
 };
 
 struct mesh
 {
-    index<geometry>       geometry;
-    u32                   vertex_offset;
-    u32                   first_index;
-    u32                   triangle_count;
-    index<material>       material;
-    index<transform_node> transform;
-    aabb3                 bounding_box;
+  index<geometry>       geometry;
+  u32                   vertex_offset;
+  u32                   first_index;
+  u32                   triangle_count;
+  index<material>       material;
+  index<transform_node> transform;
+  aabb3                 bounding_box;
 };
 
 struct transform_node
 {
-    mat4x3           transform;
-    index<transform> parent;
+  mat4x3           transform;
+  index<transform> parent;
 };
 
 struct texture
 {
-    vec2u        size;
-    u32          mips;
-    format       format;
-    vector<byte> data;
+  vec2u        size;
+  u32          mips;
+  format       format;
+  vector<byte> data;
 };
 
-struct renderer
+struct scene
 {
-    vector<geometry>       geometries;
-    vector<mesh>           meshes;
-    vector<transform_node> transform_nodes;
+  vector<geometry>       geometries;
+  vector<mesh>           meshes;
+  vector<texture>        textures;
+  vector<transform_node> transform_nodes;
 };

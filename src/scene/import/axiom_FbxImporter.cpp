@@ -27,6 +27,7 @@ namespace axiom
 
         ufbx_load_opts opts{};
         ufbx_error error;
+        NOVA_LOGEXPR(path.string());
         fbx = ufbx_load_file(path.string().c_str(), &opts, &error);
 
         scene.textures.resize(fbx->textures.count);
@@ -102,6 +103,8 @@ namespace axiom
 
         addProperty(property::BaseColor, inMaterial->pbr.base_color);
         addProperty(property::Normal,    inMaterial->fbx.normal_map);
+        // addProperty(property::Normal,    inMaterial->pbr.normal_map);
+        // addProperty(property::Normal,    inMaterial->fbx.bump);
         addProperty(property::Emissive,  inMaterial->pbr.emission_color);
 
         addProperty(property::Metallic,  inMaterial->pbr.metalness);
