@@ -13,7 +13,7 @@ namespace axiom
         fast_obj_destroy(obj);
     }
 
-    Scene ObjImporter::Import(const std::filesystem::path& path)
+    scene_ir::Scene ObjImporter::Import(const std::filesystem::path& path)
     {
         Reset();
 

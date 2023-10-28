@@ -11,7 +11,7 @@ namespace axiom
         scene.Clear();
     }
 
-    Scene GltfImporter::Import(const std::filesystem::path& path)
+    scene_ir::Scene GltfImporter::Import(const std::filesystem::path& path)
     {
         Reset();
         dir = path.parent_path();
@@ -100,16 +100,16 @@ namespace axiom
 
             std::visit(nova::Overloads {
                 [&](fastgltf::sources::URI& uri) {
-                    outTexture.data = ImageFileURI(std::format("{}/{}", dir.string(), uri.uri.path()));
+                    outTexture.data = scene_ir::ImageFileURI(std::format("{}/{}", dir.string(), uri.uri.path()));
                 },
                 [&](fastgltf::sources::Vector& vec) {
-                    ImageFileBuffer source;
+                    scene_ir::ImageFileBuffer source;
                     source.data.resize(vec.bytes.size());
                     std::memcpy(source.data.data(), vec.bytes.data(), vec.bytes.size());
                     outTexture.data = std::move(source);
                 },
                 [&](fastgltf::sources::ByteView& byteView) {
-                    ImageFileBuffer source;
+                    scene_ir::ImageFileBuffer source;
                     source.data.resize(byteView.bytes.size());
                     std::memcpy(source.data.data(), byteView.bytes.data(), byteView.bytes.size());
                     outTexture.data = std::move(source);
@@ -118,7 +118,7 @@ namespace axiom
                     auto& view = asset->bufferViews[bufferViewIdx.bufferViewIndex];
                     auto& buffer = asset->buffers[view.bufferIndex];
                     auto* bytes = fastgltf::DefaultBufferDataAdapter{}(buffer) + view.byteOffset;
-                    ImageFileBuffer source;
+                    scene_ir::ImageFileBuffer source;
                     source.data.resize(view.byteLength);
                     std::memcpy(source.data.data(), bytes, view.byteLength);
                     outTexture.data = std::move(source);
@@ -128,10 +128,10 @@ namespace axiom
                 },
             }, asset->images[inTexture.imageIndex.value()].data);
         } else {
-            outTexture.data = ImageBuffer{
+            outTexture.data = scene_ir::ImageBuffer{
                 .data{ 255, 0, 255, 255 },
                 .size{ 1, 1 },
-                .format = BufferFormat::RGBA8,
+                .format = scene_ir::BufferFormat::RGBA8,
             };
         }
     }
@@ -143,9 +143,9 @@ namespace axiom
 
         auto addProperty = nova::Overloads {
             [&](std::string_view name, fastgltf::Optional<fastgltf::TextureInfo>& texture) {
-                if (texture) outMaterial.properties.emplace_back(name, TextureSwizzle{ .textureIdx = u32(texture->textureIndex) }); },
+                if (texture) outMaterial.properties.emplace_back(name, scene_ir::TextureSwizzle{ .textureIdx = u32(texture->textureIndex) }); },
             [&](std::string_view name, fastgltf::Optional<fastgltf::NormalTextureInfo>& texture) {
-                if (texture) outMaterial.properties.emplace_back(name, TextureSwizzle{ .textureIdx = u32(texture->textureIndex) }); },
+                if (texture) outMaterial.properties.emplace_back(name, scene_ir::TextureSwizzle{ .textureIdx = u32(texture->textureIndex) }); },
             [&](std::string_view name, Span<f32> values) {
                 switch (values.size()) {
                     break;case 1: outMaterial.properties.emplace_back(name, values[0]);
@@ -166,22 +166,22 @@ namespace axiom
                 if (scalar) outMaterial.properties.emplace_back(name, scalar.value()); },
         };
 
-        addProperty(property::BaseColor, inMaterial.pbrData.baseColorTexture);
-        addProperty(property::BaseColor, inMaterial.pbrData.baseColorFactor);
+        addProperty(scene_ir::property::BaseColor, inMaterial.pbrData.baseColorTexture);
+        addProperty(scene_ir::property::BaseColor, inMaterial.pbrData.baseColorFactor);
 
-        addProperty(property::Normal, inMaterial.normalTexture);
+        addProperty(scene_ir::property::Normal, inMaterial.normalTexture);
 
-        addProperty(property::Emissive, inMaterial.emissiveTexture);
-        addProperty(property::Emissive, inMaterial.emissiveFactor);
-        addProperty(property::Emissive, inMaterial.emissiveStrength);
+        addProperty(scene_ir::property::Emissive, inMaterial.emissiveTexture);
+        addProperty(scene_ir::property::Emissive, inMaterial.emissiveFactor);
+        addProperty(scene_ir::property::Emissive, inMaterial.emissiveStrength);
 
-        addProperty(property::Metallic , inMaterial.pbrData.metallicRoughnessTexture);
-        addProperty(property::Metallic , inMaterial.pbrData.metallicFactor);
-        addProperty(property::Roughness, inMaterial.pbrData.metallicRoughnessTexture);
-        addProperty(property::Roughness, inMaterial.pbrData.roughnessFactor);
+        addProperty(scene_ir::property::Metallic , inMaterial.pbrData.metallicRoughnessTexture);
+        addProperty(scene_ir::property::Metallic , inMaterial.pbrData.metallicFactor);
+        addProperty(scene_ir::property::Roughness, inMaterial.pbrData.metallicRoughnessTexture);
+        addProperty(scene_ir::property::Roughness, inMaterial.pbrData.roughnessFactor);
 
-        addProperty(property::AlphaCutoff, inMaterial.alphaCutoff);
-        addProperty(property::AlphaMask  , inMaterial.alphaMode == fastgltf::AlphaMode::Mask);
+        addProperty(scene_ir::property::AlphaCutoff, inMaterial.alphaCutoff);
+        addProperty(scene_ir::property::AlphaMask  , inMaterial.alphaMode == fastgltf::AlphaMode::Mask);
     }
 
     void GltfImporter::ProcessMesh(u32 gltfMeshIdx, u32 primitiveIndex)
@@ -197,7 +197,7 @@ namespace axiom
             return;
 
         auto& outMesh = scene.meshes.emplace_back();
-        outMesh.materialIdx = u32(primitive.materialIndex.value_or(InvalidIndex));
+        outMesh.materialIdx = u32(primitive.materialIndex.value_or(scene_ir::InvalidIndex));
 
         // Indices
         auto& indices = asset->accessors[primitive.indicesAccessor.value()];
@@ -245,7 +245,7 @@ namespace axiom
         if (node.meshIndex.has_value()) {
             auto[meshIdx, meshCount] = gltfMeshOffsets[node.meshIndex.value()];
             for (u32 i = 0; i < meshCount; ++i) {
-                scene.instances.emplace_back(Instance {
+                scene.instances.emplace_back(scene_ir::Instance {
                     .meshIdx = meshIdx + i,
                     .transform = transform,
                 });

@@ -9,13 +9,13 @@ namespace axiom
     struct ObjImporter
     {
         std::filesystem::path dir;
-        Scene               scene;
+        scene_ir::Scene     scene;
 
         fastObjMesh* obj = nullptr;
 
         ~ObjImporter();
 
         void Reset();
-        Scene Import(const std::filesystem::path& path);
+        scene_ir::Scene Import(const std::filesystem::path& path);
     };
 }

@@ -10,12 +10,12 @@
 namespace axiom
 {
     struct AssimpIndex {
-        u32 value = InvalidIndex;
+        u32 value = scene_ir::InvalidIndex;
     };
 
     struct AssimpImporter
     {
-        Scene scene;
+        scene_ir::Scene scene;
 
         std::filesystem::path dir;
         Assimp::Importer   assimp;
@@ -39,6 +39,6 @@ namespace axiom
         // void ProcessScene();
         // void ProcessNode(aiNode* node, Mat4 parentTransform);
 
-        Scene Import(const std::filesystem::path& path);
+        scene_ir::Scene Import(const std::filesystem::path& path);
     };
 }

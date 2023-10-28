@@ -11,6 +11,6 @@ namespace axiom
         bool        flipUVs = false;
         bool flipNormalMapZ = false;
 
-        void Compile(Scene& inScene, CompiledScene& outScene);
+        void Compile(scene_ir::Scene& inScene, CompiledScene& outScene);
     };
 }

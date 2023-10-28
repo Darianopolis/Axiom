@@ -4,125 +4,128 @@
 
 namespace axiom
 {
-    enum class BufferFormat
+    namespace scene_ir
     {
-        RGBA8,
-    };
-
-    struct ImageFileURI
-    {
-        std::string uri;
-    };
-
-    struct ImageFileBuffer
-    {
-        std::vector<u8> data;
-    };
-
-    struct ImageBuffer
-    {
-        std::vector<u8> data;
-        Vec2U           size;
-        BufferFormat  format;
-    };
-
-    using ImageDataSource = std::variant<ImageBuffer, ImageFileBuffer, ImageFileURI>;
-
-    struct Texture
-    {
-        ImageDataSource data;
-    };
-
-    constexpr u32 InvalidIndex = UINT_MAX;
-
-    struct TextureSwizzle
-    {
-        u32             textureIdx = InvalidIndex;
-        std::array<i8, 4> channels{ -1, -1, -1, -1 };
-    };
-
-    namespace property {
-        constexpr std::string_view BaseColor     = "base_color"sv;
-        constexpr std::string_view Alpha         = "alpha"sv;
-        constexpr std::string_view Normal        = "normal"sv;
-        constexpr std::string_view Emissive      = "emissive"sv;
-        constexpr std::string_view Metallic      = "metallic"sv;
-        constexpr std::string_view Roughness     = "roughness"sv;
-        constexpr std::string_view AlphaCutoff   = "alpha_cutoff"sv;
-        constexpr std::string_view AlphaMask     = "alpha_blend"sv;
-        constexpr std::string_view SpecularColor = "specular_color"sv;
-        constexpr std::string_view Specular      = "specular"sv;
-    }
-
-    using PropertyValue = std::variant<
-        TextureSwizzle,
-        bool,
-        i32,
-        f32,
-        Vec2,
-        Vec3,
-        Vec4>;
-
-    struct Property
-    {
-        std::string_view name;
-        PropertyValue   value;
-    };
-
-    struct Material
-    {
-        std::vector<Property> properties;
-
-        template<class ValueT>
-        ValueT* GetProperty(std::string_view type)
+        enum class BufferFormat
         {
-            for (auto& property : properties) {
-                if (property.name == type
-                        && std::holds_alternative<ValueT>(property.value)) {
-                    return &std::get<ValueT>(property.value);
+            RGBA8,
+        };
+
+        struct ImageFileURI
+        {
+            std::string uri;
+        };
+
+        struct ImageFileBuffer
+        {
+            std::vector<u8> data;
+        };
+
+        struct ImageBuffer
+        {
+            std::vector<u8> data;
+            Vec2U           size;
+            BufferFormat  format;
+        };
+
+        using ImageDataSource = std::variant<ImageBuffer, ImageFileBuffer, ImageFileURI>;
+
+        struct Texture
+        {
+            ImageDataSource data;
+        };
+
+        constexpr u32 InvalidIndex = UINT_MAX;
+
+        struct TextureSwizzle
+        {
+            u32             textureIdx = InvalidIndex;
+            std::array<i8, 4> channels{ -1, -1, -1, -1 };
+        };
+
+        namespace property {
+            constexpr std::string_view BaseColor     = "base_color"sv;
+            constexpr std::string_view Alpha         = "alpha"sv;
+            constexpr std::string_view Normal        = "normal"sv;
+            constexpr std::string_view Emissive      = "emissive"sv;
+            constexpr std::string_view Metallic      = "metallic"sv;
+            constexpr std::string_view Roughness     = "roughness"sv;
+            constexpr std::string_view AlphaCutoff   = "alpha_cutoff"sv;
+            constexpr std::string_view AlphaMask     = "alpha_blend"sv;
+            constexpr std::string_view SpecularColor = "specular_color"sv;
+            constexpr std::string_view Specular      = "specular"sv;
+        }
+
+        using PropertyValue = std::variant<
+            TextureSwizzle,
+            bool,
+            i32,
+            f32,
+            Vec2,
+            Vec3,
+            Vec4>;
+
+        struct Property
+        {
+            std::string_view name;
+            PropertyValue   value;
+        };
+
+        struct Material
+        {
+            std::vector<Property> properties;
+
+            template<class ValueT>
+            ValueT* GetProperty(std::string_view type)
+            {
+                for (auto& property : properties) {
+                    if (property.name == type
+                            && std::holds_alternative<ValueT>(property.value)) {
+                        return &std::get<ValueT>(property.value);
+                    }
                 }
+
+                return nullptr;
             }
 
-            return nullptr;
-        }
+            // f32 alphaCutoff = 0.5f;
+            // bool  alphaMask = false;
+            // bool alphaBlend = false;
+            // bool     volume = false;
+            // bool      decal = false;
+        };
 
-        // f32 alphaCutoff = 0.5f;
-        // bool  alphaMask = false;
-        // bool alphaBlend = false;
-        // bool     volume = false;
-        // bool      decal = false;
-    };
-
-    struct Mesh
-    {
-        std::vector<Vec3> positions;
-        std::vector<Vec3>   normals;
-        std::vector<Vec2> texCoords;
-        std::vector<u32>    indices;
-        u32             materialIdx = InvalidIndex;
-    };
-
-    struct Instance
-    {
-        u32    meshIdx = InvalidIndex;
-        Mat4 transform;
-    };
-
-    struct Scene
-    {
-        std::vector<Texture>   textures;
-        std::vector<Material> materials;
-        std::vector<Mesh>        meshes;
-        std::vector<Instance> instances;
-
-        void Clear()
+        struct Mesh
         {
-            textures.clear();
-            materials.clear();
-            meshes.clear();
-            instances.clear();
-        }
+            std::vector<Vec3> positions;
+            std::vector<Vec3>   normals;
+            std::vector<Vec2> texCoords;
+            std::vector<u32>    indices;
+            u32             materialIdx = InvalidIndex;
+        };
 
-        void Debug();
-    };
+        struct Instance
+        {
+            u32    meshIdx = InvalidIndex;
+            Mat4 transform;
+        };
+
+        struct Scene
+        {
+            std::vector<Texture>   textures;
+            std::vector<Material> materials;
+            std::vector<Mesh>        meshes;
+            std::vector<Instance> instances;
+
+            void Clear()
+            {
+                textures.clear();
+                materials.clear();
+                meshes.clear();
+                instances.clear();
+            }
+
+            void Debug();
+        };
+    }
 }

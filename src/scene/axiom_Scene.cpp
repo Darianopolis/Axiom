@@ -2,7 +2,7 @@
 
 namespace axiom
 {
-    void Scene::Debug()
+    void scene_ir::Scene::Debug()
     {
         auto writeHeader = [&](std::string_view header) {
             NOVA_LOG("\n{:=^80}\n", std::format(" {} ", header));

@@ -12,7 +12,7 @@ namespace axiom
 
         std::filesystem::path dir;
 
-        Scene scene;
+        scene_ir::Scene scene;
 
         std::vector<std::pair<u32, u32>> gltfMeshOffsets;
 
@@ -22,6 +22,6 @@ namespace axiom
         void ProcessMesh(u32 gltfMeshIdx, u32 primIdx);
         void ProcessNode(usz nodeIdx, Mat4 parentTransform);
 
-        Scene Import(const std::filesystem::path& path);
+        scene_ir::Scene Import(const std::filesystem::path& path);
     };
 }

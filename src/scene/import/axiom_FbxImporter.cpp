@@ -20,7 +20,7 @@ namespace axiom
         vertexIndices.clear();
     }
 
-    Scene FbxImporter::Import(const std::filesystem::path& path)
+    scene_ir::Scene FbxImporter::Import(const std::filesystem::path& path)
     {
         Reset();
         dir = path.parent_path();
@@ -63,13 +63,13 @@ namespace axiom
         textureIndices[inTexture] = texIdx;
 
         if (inTexture->content.size > 0) {
-            outTexture.data = ImageFileBuffer {
+            outTexture.data = scene_ir::ImageFileBuffer {
                 .data = std::vector(
                     (const u8*)inTexture->content.data,
                     (const u8*)inTexture->content.data + inTexture->content.size),
             };
         } else if (inTexture->has_file) {
-            outTexture.data = ImageFileURI(std::string(inTexture->filename.data, inTexture->filename.length));
+            outTexture.data = scene_ir::ImageFileURI(std::string(inTexture->filename.data, inTexture->filename.length));
         } else {
             NOVA_THROW("Non-file images not currently supported");
         }
@@ -87,7 +87,7 @@ namespace axiom
                 const ufbx_material_map& map) {
 
             if (map.texture_enabled && map.texture) {
-                outMaterial.properties.emplace_back(name, TextureSwizzle{ .textureIdx = u32(textureIndices[map.texture]) });
+                outMaterial.properties.emplace_back(name, scene_ir::TextureSwizzle{ .textureIdx = u32(textureIndices[map.texture]) });
             }
 
             if (map.has_value) {
@@ -101,18 +101,18 @@ namespace axiom
             }
         };
 
-        addProperty(property::BaseColor, inMaterial->pbr.base_color);
-        addProperty(property::Normal,    inMaterial->fbx.normal_map);
+        addProperty(scene_ir::property::BaseColor, inMaterial->pbr.base_color);
+        addProperty(scene_ir::property::Normal,    inMaterial->fbx.normal_map);
         // addProperty(property::Normal,    inMaterial->pbr.normal_map);
         // addProperty(property::Normal,    inMaterial->fbx.bump);
-        addProperty(property::Emissive,  inMaterial->pbr.emission_color);
+        addProperty(scene_ir::property::Emissive,  inMaterial->pbr.emission_color);
 
-        addProperty(property::Metallic,  inMaterial->pbr.metalness);
-        addProperty(property::Roughness, inMaterial->pbr.roughness);
+        addProperty(scene_ir::property::Metallic,  inMaterial->pbr.metalness);
+        addProperty(scene_ir::property::Roughness, inMaterial->pbr.roughness);
 
-        addProperty(property::SpecularColor, inMaterial->fbx.specular_color);
+        addProperty(scene_ir::property::SpecularColor, inMaterial->fbx.specular_color);
 
-        outMaterial.properties.emplace_back(property::AlphaMask, inMaterial->features.opacity.enabled);
+        outMaterial.properties.emplace_back(scene_ir::property::AlphaMask, inMaterial->features.opacity.enabled);
     }
 
     void FbxImporter::ProcessMesh(u32 fbxMeshIdx, u32 primIdx)
@@ -152,7 +152,7 @@ namespace axiom
                 }
 
                 auto& cached = uniqueVertices[v];
-                if (cached.value == InvalidIndex) {
+                if (cached.value == scene_ir::InvalidIndex) {
                     cached.value = vertexCount++;
                     vertexIndices.push_back(v);
                 }
@@ -203,7 +203,7 @@ namespace axiom
 
             auto[meshIdx, meshCount] = fbxMeshOffsets[u32(std::distance(fbx->meshes.begin(), meshIter))];
             for (u32 i = 0; i < meshCount; ++i) {
-                scene.instances.emplace_back(Instance {
+                scene.instances.emplace_back(scene_ir::Instance {
                     .meshIdx = meshIdx + i,
                     .transform = transform,
                 });

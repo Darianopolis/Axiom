@@ -9,7 +9,7 @@ namespace axiom
 {
     struct FbxIndex
     {
-        u32 value = InvalidIndex;
+        u32 value = scene_ir::InvalidIndex;
     };
 
     struct FbxVertex
@@ -35,7 +35,7 @@ namespace axiom
 
         std::filesystem::path dir;
 
-        Scene scene;
+        scene_ir::Scene scene;
 
         std::vector<std::pair<u32, u32>> fbxMeshOffsets;
 
@@ -49,7 +49,7 @@ namespace axiom
         ~FbxImporter();
 
         void Reset();
-        Scene Import(const std::filesystem::path& path);
+        scene_ir::Scene Import(const std::filesystem::path& path);
 
         void ProcessTexture(u32 texIdx);
         void ProcessMaterial(u32 matIdx);

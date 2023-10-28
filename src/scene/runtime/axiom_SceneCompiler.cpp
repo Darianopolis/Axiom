@@ -2,7 +2,7 @@
 
 namespace axiom
 {
-    void SceneCompiler::Compile(Scene& inScene, CompiledScene& outScene)
+    void SceneCompiler::Compile(scene_ir::Scene& inScene, CompiledScene& outScene)
     {
         auto defaultMaterial = Ref<UVMaterial>::Create();
         outScene.materials.push_back(defaultMaterial);
@@ -26,7 +26,7 @@ namespace axiom
             if (flipNormalMapZ) {
                 for (auto& material : inScene.materials) {
                     // TODO: This should follow the mapping process
-                    if (auto p = material.GetProperty<TextureSwizzle>(property::Normal); p && p->textureIdx == i) {
+                    if (auto p = material.GetProperty<scene_ir::TextureSwizzle>(scene_ir::property::Normal); p && p->textureIdx == i) {
                         processes |= ImageProcess::FlipNrmZ;
                         break;
                     }
@@ -36,7 +36,7 @@ namespace axiom
             // constexpr u32 MaxDim = 512;
             constexpr u32 MaxDim = 4096;
 
-            if (auto uri = std::get_if<ImageFileURI>(&inTexture.data)) {
+            if (auto uri = std::get_if<scene_ir::ImageFileURI>(&inTexture.data)) {
                 auto path = std::filesystem::path(uri->uri);
                 if (path.extension() == ".dds") {
                     path.replace_extension(".png");
@@ -47,9 +47,9 @@ namespace axiom
                 }
                 path = std::filesystem::canonical(path);
                 s_ImageProcessor.ProcessImage(path.string().c_str(), 0, ImageType::ColorAlpha, MaxDim, processes);
-            } else if (auto file = std::get_if<ImageFileBuffer>(&inTexture.data)) {
+            } else if (auto file = std::get_if<scene_ir::ImageFileBuffer>(&inTexture.data)) {
                 s_ImageProcessor.ProcessImage((const char*)file->data.data(), file->data.size(), ImageType::ColorAlpha, MaxDim, {});
-            } else if (auto buffer = std::get_if<ImageBuffer>(&inTexture.data)) {
+            } else if (auto buffer = std::get_if<scene_ir::ImageBuffer>(&inTexture.data)) {
                 NOVA_THROW("Buffer data source not currently supported");
             }
 
@@ -100,7 +100,7 @@ namespace axiom
 
             auto getImage = [&](std::string_view property, nova::types::Ref<UVTexture> fallback) {
 
-                auto* texture = inMaterial.GetProperty<TextureSwizzle>(property);
+                auto* texture = inMaterial.GetProperty<scene_ir::TextureSwizzle>(property);
 
                 if (texture) {
                     auto tex = outScene.textures[textureOffset + texture->textureIdx];
@@ -130,20 +130,20 @@ namespace axiom
 
             // TODO: Channel remapping!
 
-            outMaterial->baseColor_alpha = getImage(property::BaseColor, defaultMaterial->baseColor_alpha);
+            outMaterial->baseColor_alpha = getImage(scene_ir::property::BaseColor, defaultMaterial->baseColor_alpha);
             outMaterial->normals = getImage("sdfggsdgsdfg", defaultMaterial->normals);
             {
-                if (auto* tex = inMaterial.GetProperty<TextureSwizzle>(property::Metallic);
+                if (auto* tex = inMaterial.GetProperty<scene_ir::TextureSwizzle>(scene_ir::property::Metallic);
                         tex && outScene.textures[textureOffset + tex->textureIdx]->data.size()) {
                     // TODO: Fixme
                     outMaterial->metalness_roughness = outScene.textures[textureOffset + tex->textureIdx];
-                } else if (tex = inMaterial.GetProperty<TextureSwizzle>(property::SpecularColor);
+                } else if (tex = inMaterial.GetProperty<scene_ir::TextureSwizzle>(scene_ir::property::SpecularColor);
                         tex && outScene.textures[textureOffset + tex->textureIdx]->data.size()) {
                     // TODO: Fixme
                     outMaterial->metalness_roughness = outScene.textures[textureOffset + tex->textureIdx];
                 } else {
-                    auto* _metalness = inMaterial.GetProperty<f32>(property::Metallic);
-                    auto* _roughness = inMaterial.GetProperty<f32>(property::Roughness);
+                    auto* _metalness = inMaterial.GetProperty<f32>(scene_ir::property::Metallic);
+                    auto* _roughness = inMaterial.GetProperty<f32>(scene_ir::property::Roughness);
 
                     f32 metalness = _metalness ? *_metalness : 0.f;
                     f32 roughness = _roughness ? *_roughness : 0.5f;
@@ -151,13 +151,13 @@ namespace axiom
                     outMaterial->metalness_roughness = createPixelImage({ 0.f, roughness, metalness, 1.f });
                 }
             }
-            outMaterial->emissivity = getImage(property::Emissive, defaultMaterial->emissivity);
+            outMaterial->emissivity = getImage(scene_ir::property::Emissive, defaultMaterial->emissivity);
             outMaterial->transmission = getImage("", defaultMaterial->transmission);
 
-            outMaterial->alphaCutoff = [](f32*v){return v?*v:0.5f;}(inMaterial.GetProperty<f32>(property::AlphaCutoff));
+            outMaterial->alphaCutoff = [](f32*v){return v?*v:0.5f;}(inMaterial.GetProperty<f32>(scene_ir::property::AlphaCutoff));
 
             // outMaterial->alphaBlend = inMaterial.alphaBlend;
-            outMaterial->alphaMask = inMaterial.GetProperty<bool>(property::AlphaMask) ||
+            outMaterial->alphaMask = inMaterial.GetProperty<bool>(scene_ir::property::AlphaMask) ||
                 outMaterial->baseColor_alpha->minAlpha < outMaterial->alphaCutoff;
             // outMaterial->decal = inMaterial.decal;
         }
@@ -206,7 +206,7 @@ namespace axiom
                 .maxVertex = u32(inMesh.positions.size() - 1),
                 .firstIndex = 0,
                 .indexCount = u32(inMesh.indices.size()),
-                .material = inMesh.materialIdx == InvalidIndex
+                .material = inMesh.materialIdx == scene_ir::InvalidIndex
                     ? outScene.materials[materialOffset - 1]
                     : outScene.materials[materialOffset + inMesh.materialIdx],
             });

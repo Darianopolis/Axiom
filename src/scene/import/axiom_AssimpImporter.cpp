@@ -8,7 +8,7 @@ namespace axiom
         assimp.FreeScene();
     }
 
-    Scene AssimpImporter::Import(const std::filesystem::path& path)
+    scene_ir::Scene AssimpImporter::Import(const std::filesystem::path& path)
     {
         u32 aiFlags = 0;
         aiFlags |= aiProcess_JoinIdenticalVertices;
@@ -72,7 +72,7 @@ namespace axiom
             if (inTexture->mHeight == 0) {
                 // Compressed file contents stored inline
 
-                ImageFileBuffer buffer;
+                scene_ir::ImageFileBuffer buffer;
 
                 buffer.data.resize(inTexture->mWidth);
                 std::memcpy(buffer.data.data(), inTexture->pcData, inTexture->mWidth);
@@ -82,16 +82,16 @@ namespace axiom
             } else {
                 // Texel data
 
-                ImageBuffer buffer;
+                scene_ir::ImageBuffer buffer;
                 buffer.size = { inTexture->mWidth, inTexture->mHeight };
-                buffer.format = BufferFormat::RGBA8;
+                buffer.format = scene_ir::BufferFormat::RGBA8;
                 buffer.data.resize(inTexture->mWidth);
                 std::memcpy(buffer.data.data(), inTexture->pcData, inTexture->mWidth);
 
                 outTexture.data = std::move(buffer);
             }
         } else {
-            outTexture.data = ImageFileURI(std::format("{}/{}", dir.string(), inTexture->mFilename.C_Str()));
+            outTexture.data = scene_ir::ImageFileURI(std::format("{}/{}", dir.string(), inTexture->mFilename.C_Str()));
         }
     }
 
@@ -111,9 +111,9 @@ namespace axiom
                         } else {
                             auto path = std::format("{}/{}", dir.string(), str.C_Str());
                             auto& textureIndex = textureIndices[path];
-                            if (textureIndex.value == InvalidIndex) {
+                            if (textureIndex.value == scene_ir::InvalidIndex) {
                                 textureIndex.value = u32(scene.textures.size());
-                                scene.textures.emplace_back(ImageFileURI(path));
+                                scene.textures.emplace_back(scene_ir::ImageFileURI(path));
                             }
                             return textureIndex.value;
                         }
@@ -368,7 +368,7 @@ namespace axiom
             if (scene.meshes[node->mMeshes[i]].indices.empty())
                 continue;
 
-            scene.instances.push_back(Instance {
+            scene.instances.push_back(scene_ir::Instance {
                 .meshIdx = node->mMeshes[i],
                 .transform = transform,
             });

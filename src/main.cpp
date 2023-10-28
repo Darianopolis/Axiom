@@ -92,7 +92,7 @@
 //         auto ext = path.extension().string();
 //         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return char(std::tolower(c)); });
 
-//         axiom::Scene scene;
+//         axiom::scene_ir::Scene scene;
 
 //         if (useAssimp) {
 //             scene = assimpImporter.Import(path);
