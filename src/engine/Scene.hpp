@@ -2,16 +2,14 @@
 
 #include "Engine.hpp"
 
+#include <scene/runtime/axiom_Attributes.hpp>
+
 namespace axiom
 {
     struct ShadingAttribute
     {
-        u32    normal : 21;
-        u32   tangent : 21;
-        u32 bitangent :  1;
-        u32  _padding : 21;
-
-        u16 texCoords[2];
+        GPU_TangentSpace tangent_space;
+        GPU_TexCoords    tex_coords;
     };
 
     struct SkinningAttribute
@@ -24,9 +22,13 @@ namespace axiom
     struct Index {
         u32 value = UINT_MAX;
 
-        Index& operator=(u32 i) noexcept
+        Index(usz i) noexcept
+            : value(u32(i))
+        {}
+
+        Index& operator=(usz i) noexcept
         {
-            value = i;
+            value = u32(i);
             return *this;
         }
 

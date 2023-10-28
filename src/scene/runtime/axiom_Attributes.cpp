@@ -248,7 +248,13 @@ namespace axiom
             ts.octY = u32(encNormal.y * 1023.0);
             ts.octS = u32(encNormal.z);
 
-            auto encTangent = EncodeTangent(tbn.normal, tbn.tangent);
+            auto decodeNormal = SignedOctDecode(Vec3(
+                f32(ts.octX) / 1023.f,
+                f32(ts.octY) / 1023.f,
+                f32(ts.octS)
+            ));
+
+            auto encTangent = EncodeTangent(decodeNormal, tbn.tangent);
             ts.tgtA = u32(encTangent * 1023.0);
 
             auto encBitangent = glm::dot(glm::cross(tbn.normal, tbn.tangent), tbn.bitangent) > 0.f;

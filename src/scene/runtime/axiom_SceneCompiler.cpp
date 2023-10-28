@@ -93,6 +93,8 @@ namespace axiom
         defaultMaterial->emissivity = createPixelImage({ 0.f, 0.f, 0.f, 1.f });
         defaultMaterial->transmission = createPixelImage({ 0.f, 0.f, 0.f, 255.f });
 
+        auto totalBaseColor = 0;
+
         u32 materialOffset = u32(outScene.materials.size());
         for (auto& inMaterial : inScene.materials) {
             auto outMaterial = Ref<UVMaterial>::Create();
@@ -105,6 +107,9 @@ namespace axiom
                 if (texture) {
                     auto tex = outScene.textures[textureOffset + texture->textureIdx];
                     if (tex->data.size()) {
+                        if (property == scene_ir::property::BaseColor) {
+                            totalBaseColor++;
+                        }
                         return tex;
                     }
                 }
@@ -131,7 +136,7 @@ namespace axiom
             // TODO: Channel remapping!
 
             outMaterial->baseColor_alpha = getImage(scene_ir::property::BaseColor, defaultMaterial->baseColor_alpha);
-            outMaterial->normals = getImage("sdfggsdgsdfg", defaultMaterial->normals);
+            outMaterial->normals = getImage(scene_ir::property::Normal, defaultMaterial->normals);
             {
                 if (auto* tex = inMaterial.GetProperty<scene_ir::TextureSwizzle>(scene_ir::property::Metallic);
                         tex && outScene.textures[textureOffset + tex->textureIdx]->data.size()) {
@@ -161,6 +166,8 @@ namespace axiom
                 outMaterial->baseColor_alpha->minAlpha < outMaterial->alphaCutoff;
             // outMaterial->decal = inMaterial.decal;
         }
+
+        NOVA_LOGEXPR(totalBaseColor);
 
         u64 totalTangentSpaces = 0;
         ankerl::unordered_dense::set<u64> uniqueTangentSpace;
