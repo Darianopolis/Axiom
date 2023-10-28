@@ -1,6 +1,6 @@
-#include "Engine.hpp"
+#include <engine/Engine.hpp>
 
-#include "Renderer.hpp"
+#include <engine/Renderer.hpp>
 
 #include <glfw/glfw3.h>
 #include <GLFW/glfw3native.h>

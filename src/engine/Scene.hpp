@@ -22,6 +22,9 @@ namespace axiom
     struct Index {
         u32 value = UINT_MAX;
 
+        Index() noexcept
+        {}
+
         Index(usz i) noexcept
             : value(u32(i))
         {}
