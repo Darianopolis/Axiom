@@ -88,24 +88,34 @@ int main(int argc, char* argv[])
 
     axiom::CompiledScene compiledScene;
 
-    for (auto& path : paths) {
-        auto ext = path.extension().string();
-        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return char(std::tolower(c)); });
+    // for (auto& path : paths) {
+    //     auto ext = path.extension().string();
+    //     std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return char(std::tolower(c)); });
 
-        axiom::scene_ir::Scene scene;
+    //     axiom::scene_ir::Scene scene;
 
-        if (useAssimp) {
-            scene = assimpImporter.Import(path);
-        } else if (ext == ".gltf" || ext == ".glb") {
-            scene = gltfImporter.Import(path);
-        } else if (ext == ".fbx") {
-            scene = fbxImporter.Import(path);
-        } else {
-            scene = assimpImporter.Import(path);
-        }
+    //     if (useAssimp) {
+    //         scene = assimpImporter.Import(path);
+    //     } else if (ext == ".gltf" || ext == ".glb") {
+    //         scene = gltfImporter.Import(path);
+    //     } else if (ext == ".fbx") {
+    //         scene = fbxImporter.Import(path);
+    //     } else {
+    //         scene = assimpImporter.Import(path);
+    //     }
 
-        scene.Debug();
-        compiler.Compile(scene, compiledScene);
+    //     scene.Debug();
+    //     compiler.Compile(scene, compiledScene);
+    // }
+
+    {
+        auto& path = paths[0];
+        imp::Importer importer;
+        importer.SetBaseDir(path.parent_path());
+        importer.LoadFile(path);
+        importer.ReportStatistics();
+        auto scene = importer.GenerateScene();
+        compiledScene.Compile(scene);
     }
 
 // -----------------------------------------------------------------------------

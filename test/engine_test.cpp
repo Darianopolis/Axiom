@@ -105,29 +105,29 @@ int main()
         step->renderer.engine = &engine;
         step->renderer.Init();
 
-        // axiom::Scene scene;
-        // scene.geometries.emplace_back(axiom::Geometry {
-        //     .indices = { 0, 1, 2 },
-        //     .position_attributes = { Vec3(-0.6f, 0.6f, 0.f), Vec3(0.6f, 0.6f, 0.f), Vec3(0.f, -0.6f, 0.f) },
-        // });
-        // scene.geometry_ranges.emplace_back(axiom::GeometryRange {
-        //     .geometry = 0,
-        //     .vertex_offset = 0,
-        //     .max_vertex = 2,
-        //     .first_index = 0,
-        //     .triangle_count = 1,
-        // });
-        // scene.transform_nodes.emplace_back(axiom::TransformNode {
-        //     .transform = glm::mat4x3(glm::translate(Mat4(1.f), Vec3(0.f, 0.f, -10.f))),
-        // });
-        // scene.meshes.emplace_back(axiom::Mesh {
-        //     .geometry_range = 0,
-        //     .transform = 0,
-        // });
+        axiom::Scene scene;
+        scene.geometries.emplace_back(axiom::Geometry {
+            .indices = { 0, 1, 2 },
+            .position_attributes = { Vec3(-0.6f, 0.6f, 0.f), Vec3(0.6f, 0.6f, 0.f), Vec3(0.f, -0.6f, 0.f) },
+        });
+        scene.geometry_ranges.emplace_back(axiom::GeometryRange {
+            .geometry = 0,
+            .vertex_offset = 0,
+            .max_vertex = 2,
+            .first_index = 0,
+            .triangle_count = 1,
+        });
+        scene.transform_nodes.emplace_back(axiom::TransformNode {
+            .transform = glm::mat4x3(glm::translate(Mat4(1.f), Vec3(0.f, 0.f, -10.f))),
+        });
+        scene.meshes.emplace_back(axiom::Mesh {
+            .geometry_range = 0,
+            .transform = 0,
+        });
 
-        axiom::GltfImporter gltfImporter;
-        auto scene_ir = gltfImporter.Import("D:/Dev/Cloned/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf");
-        auto scene = axiom::Compile(scene_ir);
+        // axiom::GltfImporter gltfImporter;
+        // auto scene_ir = gltfImporter.Import("D:/Dev/Cloned/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf");
+        // auto scene = axiom::Compile(scene_ir);
 
         step->renderer.scene = &scene;
         step->renderer.Update();

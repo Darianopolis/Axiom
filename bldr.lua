@@ -11,6 +11,7 @@ if Project "axiom" then
         "fast-obj",
         "ufbx",
         "base64",
+        "imp",
     }
 end
 

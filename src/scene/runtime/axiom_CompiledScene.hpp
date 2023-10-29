@@ -4,6 +4,8 @@
 
 #include "axiom_Attributes.hpp"
 
+#include <imp/imp_Importer.hpp>
+
 namespace axiom
 {
     struct UVTexture : nova::RefCounted
@@ -88,5 +90,7 @@ namespace axiom
                 }
             }
         }
+
+        void Compile(imp::Scene& scene);
     };
 }
