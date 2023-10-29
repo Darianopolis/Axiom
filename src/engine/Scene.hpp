@@ -14,8 +14,7 @@ namespace axiom
 
     struct SkinningAttribute
     {
-        u16 indices[4];
-        u16 weights[4];
+        GPU_BoneWeights bone_weights;
     };
 
     template<class T>

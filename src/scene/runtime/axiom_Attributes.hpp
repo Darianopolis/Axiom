@@ -84,6 +84,12 @@ namespace axiom
         u32 packed;
     };
 
+    struct GPU_BoneWeights
+    {
+        u32 boneIndices[2];
+        u32 boneWeights[2];
+    };
+
     class MeshProcessor
     {
         struct TangentSpace
