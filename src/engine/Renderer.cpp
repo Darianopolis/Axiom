@@ -29,6 +29,7 @@ namespace axiom
             #extension GL_EXT_shader_explicit_arithmetic_types_int8  : require
             #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 
+            #define i32 int
             #define u32 uint
             #define u64 uint64_t
             #define f32 float
@@ -40,30 +41,27 @@ namespace axiom
                 u32 value;
             };
 
-            BUFFER_REF(4) readonly PositionAttribute
+            BUFFER_REF(4) readonly Position
             {
-                vec3 position;
+                vec3 value;
             };
 
-            BUFFER_REF(4) readonly ShadingAttributes
+            BUFFER_REF(4) readonly TangentSpace
             {
-                u32 normal;
-                u32 tangent;
-                u32 tex_coords;
+                u32 packed;
             };
 
-            BUFFER_REF(4) readonly SkinningAttributes
+            BUFFER_REF(4) readonly TexCoord
             {
-                u32 indices[2];
-                u32 weights[2];
+                u32 packed;
             };
 
             BUFFER_REF(8) readonly Geometry
             {
-                Index              indices;
-                PositionAttribute  position_attributes;
-                ShadingAttributes  shading_attributes;
-                SkinningAttributes skinning_attributes;
+                Index        indices;
+                Position     positions;
+                TangentSpace tangent_spaces;
+                TexCoord     tex_coords;
             };
 
             BUFFER_REF(4) readonly GeometryRange
@@ -77,40 +75,45 @@ namespace axiom
 
             BUFFER_REF(4) readonly Material
             {
+                i32 albedo_alpha_texture;
                 u32 albedo_alpha;
+
+                i32 metalness_texture;
+                i32 roughness_texture;
                 u32 metalness_roughness;
-                u32 normal;
-                u32 emission;
-                u32 transmission;
 
-                f32 ior;
-                f32 alpha_cutoff;
+                i32 normal_texture;
+
+                i32 emission_texture;
+                u32 emission_factor;
+
+                i32 transmission_texture;
+                u32 transmission_factor;
             };
 
-            BUFFER_REF(4) readonly TransformNode
-            {
-                mat4x3 transform;
-                u32    parent;
-            };
+            // BUFFER_REF(4) readonly TransformNode
+            // {
+            //     mat4x3 transform;
+            //     u32    parent;
+            // };
 
-            BUFFER_REF(4) readonly TransformCache
-            {
-                mat4x3 transform;
-            };
+            // BUFFER_REF(4) readonly TransformCache
+            // {
+            //     mat4x3 transform;
+            // };
 
             BUFFER_REF(4) readonly Mesh
             {
-                u32 material;
-                u32 geometry_range;
-                u32 transform;
+                u32    geometry_range;
+                mat4x3 transform;
             };
 
             layout(push_constant, scalar) readonly uniform PushConstants {
                 Geometry       geometries;
                 GeometryRange  geometry_ranges;
                 Material       materials;
-                TransformNode  transform_nodes;
-                TransformCache transform_cache;
+                // TransformNode  transform_nodes;
+                // TransformCache transform_cache;
                 Mesh           meshes;
 
                 mat4 view_proj;
@@ -126,9 +129,9 @@ namespace axiom
                         Mesh mesh = pc.meshes[gl_InstanceIndex];
                         GeometryRange geom_range = pc.geometry_ranges[mesh.geometry_range];
                         Geometry geometry = pc.geometries[geom_range.geometry];
-                        vec3 pos = geometry.position_attributes[gl_VertexIndex].position;
+                        vec3 pos = geometry.positions[gl_VertexIndex].value;
                         outPosition = pos;
-                        gl_Position = pc.view_proj * vec4(pc.transform_cache[mesh.transform].transform * vec4(pos, 1), 1);
+                        gl_Position = pc.view_proj * vec4(mesh.transform * vec4(pos, 1), 1);
                     }
                 )glsl"
             })
@@ -161,12 +164,12 @@ namespace axiom
 
         geometry_buffers.resize(MaxGeometries);
         geometries      = nova::Buffer::Create(engine->context, nova::SizeOf<GPU_Geometry>(MaxGeometries),      usage, flags);
-        geometry_ranges = nova::Buffer::Create(engine->context, nova::SizeOf<GeometryRange>(MaxGeometryRanges), usage, flags);
+        geometry_ranges = nova::Buffer::Create(engine->context, nova::SizeOf<imp::GeometryRange>(MaxGeometryRanges), usage, flags);
         textures.resize(MaxTextures);
-        materials       = nova::Buffer::Create(engine->context, nova::SizeOf<Material>(MaxMaterials),           usage, flags);
-        transform_nodes = nova::Buffer::Create(engine->context, nova::SizeOf<TransformNode>(MaxTransformNodes), usage, flags);
-        transform_cache = nova::Buffer::Create(engine->context, nova::SizeOf<glm::mat4x3>(MaxTransformNodes),   usage, flags);
-        meshes          = nova::Buffer::Create(engine->context, nova::SizeOf<Mesh>(MaxMeshes),                  usage, flags);
+        materials       = nova::Buffer::Create(engine->context, nova::SizeOf<imp::Material>(MaxMaterials),           usage, flags);
+        // transform_nodes = nova::Buffer::Create(engine->context, nova::SizeOf<TransformNode>(MaxTransformNodes), usage, flags);
+        // transform_cache = nova::Buffer::Create(engine->context, nova::SizeOf<glm::mat4x3>(MaxTransformNodes),   usage, flags);
+        meshes          = nova::Buffer::Create(engine->context, nova::SizeOf<imp::Mesh>(MaxMeshes),                  usage, flags);
     }
 
     void Renderer::Destroy()
@@ -182,40 +185,42 @@ namespace axiom
         for (auto& buffer : geometry_buffers) {
             buffer.Destroy();
         }
+        depth_buffer.Destroy();
     }
 
     void Renderer::Update()
     {
         // Geometries
 
-        for (u32 i = 0; i < scene->geometries.size(); ++i) {
+        for (u32 i = 0; i < scene->geometries.count; ++i) {
             auto& geometry = scene->geometries[i];
 
-            usz index_size    = geometry.indices.size()             * sizeof(u32);
-            usz pos_size      = geometry.position_attributes.size() * sizeof(Vec3);
-            usz shading_size  = geometry.shading_attributes.size()  * sizeof(ShadingAttribute);
-            usz skinning_size = geometry.skinning_attributes.size() * sizeof(SkinningAttribute);
+            usz index_size         = geometry.indices.count        * sizeof(u32);
+            usz pos_size           = geometry.positions.count      * sizeof(Vec3);
+            usz tangent_space_size = geometry.tangent_spaces.count * sizeof(imp::Basis);
+            usz tex_coord_size     = geometry.tex_coords.count     * sizeof(imp::Vec2<imp::Float16>);
 
             GPU_Geometry gpu;
-            gpu.indices_va             = 0;
-            gpu.position_attributes_va = nova::AlignUpPower2(gpu.indices_va             + index_size,   4);
-            gpu.shading_attributes_va  = nova::AlignUpPower2(gpu.position_attributes_va + pos_size,     4);
-            gpu.skinning_attributes_va = nova::AlignUpPower2(gpu.shading_attributes_va  + shading_size, 4);
+            gpu.indices_va        = 0;
+            gpu.positions_va      = nova::AlignUpPower2(gpu.indices_va        + index_size,   4);
+            gpu.tangent_spaces_va = nova::AlignUpPower2(gpu.positions_va      + pos_size,     4);
+            gpu.tex_coords_va     = nova::AlignUpPower2(gpu.tangent_spaces_va + tangent_space_size, 4);
 
             auto buffer = nova::Buffer::Create(engine->context,
-                gpu.skinning_attributes_va + skinning_size,
+                gpu.tex_coords_va + tex_coord_size,
                 nova::BufferUsage::Index       | nova::BufferUsage::Storage,
                 nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
-            buffer.Set<u32>(              geometry.indices,             0, gpu.indices_va);
-            buffer.Set<Vec3>(             geometry.position_attributes, 0, gpu.position_attributes_va);
-            buffer.Set<ShadingAttribute>( geometry.shading_attributes,  0, gpu.shading_attributes_va);
-            buffer.Set<SkinningAttribute>(geometry.skinning_attributes, 0, gpu.skinning_attributes_va);
+            buffer.Set<u32>(       Span(geometry.indices.begin,        geometry.indices.count),        0, gpu.indices_va);
+            buffer.Set<Vec3>(      Span(geometry.positions.begin,      geometry.positions.count),      0, gpu.positions_va);
+            buffer.Set<imp::Basis>(Span(geometry.tangent_spaces.begin, geometry.tangent_spaces.count), 0, gpu.tangent_spaces_va);
+            buffer.Set<imp::Vec2<imp::Float16>>(
+                                   Span(geometry.tex_coords.begin,     geometry.tex_coords.count),     0, gpu.tex_coords_va);
 
-            gpu.indices_va             += buffer.GetAddress();
-            gpu.position_attributes_va += buffer.GetAddress();
-            gpu.shading_attributes_va  += buffer.GetAddress();
-            gpu.skinning_attributes_va += buffer.GetAddress();
+            gpu.indices_va        += buffer.GetAddress();
+            gpu.positions_va      += buffer.GetAddress();
+            gpu.tangent_spaces_va += buffer.GetAddress();
+            gpu.tex_coords_va     += buffer.GetAddress();
 
             geometries.Set<GPU_Geometry>({ gpu }, i);
 
@@ -224,51 +229,66 @@ namespace axiom
             geometry_buffers[i] = buffer;
         }
 
-        geometry_ranges.Set<GeometryRange>(scene->geometry_ranges);
+        geometry_ranges.Set<imp::GeometryRange>(Span(scene->geometry_ranges.begin, scene->geometry_ranges.count));
 
         // Textures
 
-        for (u32 i = 0; i < scene->textures.size(); ++i) {
+        for (u32 i = 0; i < scene->textures.count; ++i) {
             auto& texture = scene->textures[i];
+
+            nova::Format nova_format;
+            switch (texture.format) {
+                    using enum imp::TextureFormat;
+                break;case RGBA8_UNORM: nova_format = nova::Format::RGBA8_UNorm;
+                break;case RGBA8_SRGB:  nova_format = nova::Format::RGBA8_SRGB;
+                break;case RG8_UNORM:   nova_format = nova::Format::RG8_UNorm;
+                break;case R8_UNORM:    nova_format = nova::Format::R8_UNorm;
+                break;default: std::unreachable();
+            }
 
             textures[i] = nova::Texture::Create(engine->context,
                 Vec3U(texture.size, 0),
                 nova::TextureUsage::Sampled,
-                texture.format,
+                nova_format,
                 {});
 
-            textures[i].Set({}, Vec3(texture.size, 1), texture.data.data());
+            textures[i].Set({}, Vec3(texture.size, 1), texture.data.begin);
         }
 
         // Materials
 
-        for (u32 i = 0; i < scene->materials.size(); ++i) {
+        for (u32 i = 0; i < scene->materials.count; ++i) {
             auto material = scene->materials[i];
 
-            material.albedo_alpha        = textures[material.albedo_alpha.value       ].GetDescriptor();
-            material.metalness_roughness = textures[material.metalness_roughness.value].GetDescriptor();
-            material.normal              = textures[material.normal.value             ].GetDescriptor();
-            material.emission            = textures[material.emission.value           ].GetDescriptor();
-            material.transmission        = textures[material.transmission.value       ].GetDescriptor();
+            { if (auto& d = material.albedo_alpha_texture; d != -1) d = textures[d].GetDescriptor(); }
+            { if (auto& d = material.metalness_texture;    d != -1) d = textures[d].GetDescriptor(); }
+            { if (auto& d = material.roughness_texture;    d != -1) d = textures[d].GetDescriptor(); }
+            { if (auto& d = material.normal_texture;       d != -1) d = textures[d].GetDescriptor(); }
+            { if (auto& d = material.emission_texture;     d != -1) d = textures[d].GetDescriptor(); }
+            { if (auto& d = material.transmission_texture; d != -1) d = textures[d].GetDescriptor(); }
 
-            materials.Set<Material>({ material }, i);
+            materials.Set<imp::Material>({ material }, i);
         }
 
-        // Transforms
+        // Meshes
 
-        transform_nodes.Set<TransformNode>(scene->transform_nodes);
+        meshes.Set<imp::Mesh>(Span(scene->meshes.begin, scene->meshes.count));
 
-        for (u32 i = 0; i < scene->transform_nodes.size(); ++i) {
-            auto* in_transform = &scene->transform_nodes[i];
+        // // Transforms
 
-            Mat4 tform = in_transform->transform;
-            while (in_transform->parent.IsValid()) {
-                in_transform = &in_transform->parent.into(scene->transform_nodes);
-                tform = in_transform->transform * tform;
-            }
+        // transform_nodes.Set<TransformNode>(scene->transform_nodes);
 
-            transform_cache.Set<glm::mat4x3>({ glm::mat4x3(tform) }, i);
-        }
+        // for (u32 i = 0; i < scene->transform_nodes.size(); ++i) {
+        //     auto* in_transform = &scene->transform_nodes[i];
+
+        //     Mat4 tform = in_transform->transform;
+        //     while (in_transform->parent.IsValid()) {
+        //         in_transform = &in_transform->parent.into(scene->transform_nodes);
+        //         tform = in_transform->transform * tform;
+        //     }
+
+        //     transform_cache.Set<glm::mat4x3>({ glm::mat4x3(tform) }, i);
+        // }
     }
 
     void Renderer::Draw()
@@ -277,11 +297,22 @@ namespace axiom
         auto target = engine->swapchain.GetCurrent();
         auto extent = Vec2U(target.GetExtent());
 
-        cmd.BeginRendering({{}, extent}, {target});
+        if (!depth_buffer || depth_buffer.GetExtent() != target.GetExtent()) {
+            depth_buffer.Destroy();
+
+            depth_buffer = nova::Texture::Create(engine->context, { extent, 0 },
+                nova::TextureUsage::DepthStencilAttach,
+                nova::Format::D32_SFloat,
+                {});
+        }
+
+        cmd.BeginRendering({{}, extent}, {target}, depth_buffer);
         cmd.ClearColor(0, Vec4(Vec3(0.1f), 1.f), extent);
+        cmd.ClearDepth(0.f, extent);
         cmd.ResetGraphicsState();
         cmd.SetViewports({{Vec2I(0, extent.y), Vec2I(extent.x, -i32(extent.y))}}, true);
-        cmd.SetBlendState({false});
+        cmd.SetDepthState(true, true, nova::CompareOp::Greater);
+        cmd.SetBlendState({ true, false });
         cmd.BindShaders({vertex_shader, fragment_shader});
 
         f32 aspect = f32(extent.x) / f32(extent.y);
@@ -294,16 +325,16 @@ namespace axiom
             .geometries_va = geometries.GetAddress(),
             .geometry_ranges_va = geometry_ranges.GetAddress(),
             .materials_va = materials.GetAddress(),
-            .transform_nodes_va = transform_nodes.GetAddress(),
-            .transform_cache_va = transform_cache.GetAddress(),
+            // .transform_nodes_va = transform_nodes.GetAddress(),
+            // .transform_cache_va = transform_cache.GetAddress(),
             .meshes_va = meshes.GetAddress(),
             .view_proj = proj * view,
         });
 
-        for (u32 i = 0; i < scene->meshes.size(); ++i) {
+        for (u32 i = 0; i < scene->meshes.count; ++i) {
             auto& mesh = scene->meshes[i];
-            auto& geom_range = mesh.geometry_range.into(scene->geometry_ranges);
-            cmd.BindIndexBuffer(geometry_buffers[geom_range.geometry.value], nova::IndexType::U32);
+            auto& geom_range = scene->geometry_ranges[mesh.geometry_range_idx];
+            cmd.BindIndexBuffer(geometry_buffers[geom_range.geometry_idx], nova::IndexType::U32);
             cmd.DrawIndexed(geom_range.triangle_count * 3, 1, geom_range.first_index, geom_range.vertex_offset, 0);
         }
 

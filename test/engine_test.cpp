@@ -2,12 +2,15 @@
 
 #include <engine/Renderer.hpp>
 
-#include <engine/SceneCompiler.hpp>
+// #include <engine/SceneCompiler.hpp>
 
-#include <scene/axiom_Scene.hpp>
-#include <scene/import/axiom_GltfImporter.hpp>
-#include <scene/import/axiom_FbxImporter.hpp>
-#include <scene/import/axiom_AssimpImporter.hpp>
+// #include <scene/axiom_Scene.hpp>
+// #include <scene/import/axiom_GltfImporter.hpp>
+// #include <scene/import/axiom_FbxImporter.hpp>
+// #include <scene/import/axiom_AssimpImporter.hpp>
+
+#include <imp/imp_Importer.hpp>
+#include <imp/imp_Scene.hpp>
 
 #include <glfw/glfw3.h>
 #include <GLFW/glfw3native.h>
@@ -93,7 +96,7 @@ struct DemoStep : axiom::Step
     }
 };
 
-int main()
+int main(int argc, char* argv[])
 {
     try {
         axiom::Engine engine;
@@ -105,29 +108,52 @@ int main()
         step->renderer.engine = &engine;
         step->renderer.Init();
 
-        axiom::Scene scene;
-        scene.geometries.emplace_back(axiom::Geometry {
-            .indices = { 0, 1, 2 },
-            .position_attributes = { Vec3(-0.6f, 0.6f, 0.f), Vec3(0.6f, 0.6f, 0.f), Vec3(0.f, -0.6f, 0.f) },
-        });
-        scene.geometry_ranges.emplace_back(axiom::GeometryRange {
-            .geometry = 0,
-            .vertex_offset = 0,
-            .max_vertex = 2,
-            .first_index = 0,
-            .triangle_count = 1,
-        });
-        scene.transform_nodes.emplace_back(axiom::TransformNode {
-            .transform = glm::mat4x3(glm::translate(Mat4(1.f), Vec3(0.f, 0.f, -10.f))),
-        });
-        scene.meshes.emplace_back(axiom::Mesh {
-            .geometry_range = 0,
-            .transform = 0,
-        });
+        // imp::Scene scene;
+
+        // std::array<uint32_t, 3> indices = { 0, 1, 2 };
+        // std::array<glm::vec3, 3> positions = { Vec3(-0.6f, 0.6f, 0.f), Vec3(0.6f, 0.6f, 0.f), Vec3(0.f, -0.6f, 0.f) };
+        // imp::Geometry geometry;
+        // geometry.indices   = { indices.data(), indices.size() };
+        // geometry.positions = { positions.data(), positions.size() };
+        // scene.geometries = { &geometry, 1 };
+
+        // imp::GeometryRange range;
+        // range.geometry_idx = 0;
+        // range.vertex_offset = 0;
+        // range.max_vertex = 2;
+        // range.first_index = 0;
+        // range.triangle_count = 1;
+        // scene.geometry_ranges = { &range, 1 };
+
+        // imp::Mesh mesh;
+        // mesh.geometry_range_idx = 0;
+        // mesh.transform = glm::mat4x3(glm::translate(Mat4(1.f), Vec3(0.f, 0.f, -10.f)));
+        // scene.meshes = { &mesh, 1 };
 
         // axiom::GltfImporter gltfImporter;
         // auto scene_ir = gltfImporter.Import("D:/Dev/Cloned/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf");
         // auto scene = axiom::Compile(scene_ir);
+
+        std::filesystem::path path;
+
+        for (int i = 1; i < argc; ++i) {
+            auto _path = std::filesystem::path(argv[i]);
+            if (std::filesystem::exists(_path)) {
+                path = std::move(_path);
+                break;
+            }
+        }
+
+        if (path.empty()) {
+            fmt::println("Must provide a valid existing path!");
+            return 1;
+        }
+
+        imp::Importer importer;
+        importer.SetBaseDir(path.parent_path());
+        importer.LoadFile(path);
+        importer.ReportStatistics();
+        auto scene = importer.GenerateScene();
 
         step->renderer.scene = &scene;
         step->renderer.Update();

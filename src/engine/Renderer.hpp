@@ -1,16 +1,16 @@
 #pragma once
 
 #include "Engine.hpp"
-#include "Scene.hpp"
+#include <imp/imp_Scene.hpp>
 
 namespace axiom
 {
     struct GPU_Geometry
     {
         u64 indices_va;
-        u64 position_attributes_va;
-        u64 shading_attributes_va;
-        u64 skinning_attributes_va;
+        u64 positions_va;
+        u64 tangent_spaces_va;
+        u64 tex_coords_va;
     };
 
     struct GPU_PushConstants
@@ -18,8 +18,8 @@ namespace axiom
         u64 geometries_va;
         u64 geometry_ranges_va;
         u64 materials_va;
-        u64 transform_nodes_va;
-        u64 transform_cache_va;
+        // u64 transform_nodes_va;
+        // u64 transform_cache_va;
         u64 meshes_va;
 
         Mat4 view_proj;
@@ -36,7 +36,7 @@ namespace axiom
 
     public:
         Engine* engine;
-        Scene*  scene;
+        imp::Scene*  scene;
 
         std::vector<nova::Buffer>  geometry_buffers;
         nova::Buffer               geometries;
@@ -50,6 +50,9 @@ namespace axiom
 
         nova::Buffer meshes;
         std::vector<nova::AccelerationStructure> mesh_groups;
+
+    public:
+        nova::Texture depth_buffer;
 
     public:
         Vec3 position = Vec3(0.f, 0.f, 1.f);
