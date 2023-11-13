@@ -21,12 +21,12 @@ namespace axiom
 
     struct Engine
     {
-        nova::Context     context;
-        nova::Queue         queue;
-        nova::Fence         fence;
-        nova::CommandPool cmdPool;
-        nova::CommandList     cmd;
-        nova::Sampler     sampler;
+        nova::Context      context;
+        nova::Queue          queue;
+        nova::Fence          fence;
+        nova::CommandPool cmd_pool;
+        nova::CommandList      cmd;
+        nova::Sampler      sampler;
 
         struct GLFWwindow*      window;
         nova::Swapchain      swapchain;

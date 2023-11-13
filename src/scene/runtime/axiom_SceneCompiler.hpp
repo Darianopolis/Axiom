@@ -8,9 +8,9 @@ namespace axiom
 {
     struct SceneCompiler
     {
-        bool        flipUVs = false;
-        bool flipNormalMapZ = false;
+        bool          flip_uvs = false;
+        bool flip_normal_map_z = false;
 
-        void Compile(scene_ir::Scene& inScene, CompiledScene& outScene);
+        void Compile(scene_ir::Scene& in_scene, CompiledScene& out_scene);
     };
 }

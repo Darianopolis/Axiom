@@ -16,7 +16,7 @@ namespace axiom
 
         queue = context.GetQueue(nova::QueueFlags::Graphics, 0);
         fence = nova::Fence::Create(context);
-        cmdPool = nova::CommandPool::Create(context, queue);
+        cmd_pool = nova::CommandPool::Create(context, queue);
 
         sampler = nova::Sampler::Create(context, nova::Filter::Linear,
             nova::AddressMode::Repeat, nova::BorderColor::TransparentBlack, 0.f);
@@ -56,7 +56,7 @@ namespace axiom
         swapchain.Destroy();
         glfwTerminate();
         sampler.Destroy();
-        cmdPool.Destroy();
+        cmd_pool.Destroy();
         fence.Destroy();
         context.Destroy();
     }
@@ -71,8 +71,8 @@ namespace axiom
 
         fence.Wait();
         queue.Acquire({swapchain}, {fence});
-        cmdPool.Reset();
-        cmd = cmdPool.Begin();
+        cmd_pool.Reset();
+        cmd = cmd_pool.Begin();
 
         cmd.ClearColor(swapchain.GetCurrent(), Vec4(0.f));
 

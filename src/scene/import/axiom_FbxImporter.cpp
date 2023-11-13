@@ -12,12 +12,12 @@ namespace axiom
     void FbxImporter::Reset()
     {
         scene.Clear();
-        fbxMeshOffsets.clear();
-        textureIndices.clear();
-        materialIndices.clear();
-        triIndices.clear();
-        uniqueVertices.clear();
-        vertexIndices.clear();
+        fbx_mesh_offsets.clear();
+        texture_indices.clear();
+        material_indices.clear();
+        tri_indices.clear();
+        unique_vertices.clear();
+        vertex_indices.clear();
     }
 
     scene_ir::Scene FbxImporter::Import(const std::filesystem::path& path)
@@ -40,11 +40,11 @@ namespace axiom
             ProcessMaterial(i);
         }
 
-        fbxMeshOffsets.resize(fbx->meshes.count);
+        fbx_mesh_offsets.resize(fbx->meshes.count);
         for (u32 i = 0; i < fbx->meshes.count; ++i) {
             auto mesh = fbx->meshes[i];
-            fbxMeshOffsets[i].first = u32(scene.meshes.size());
-            fbxMeshOffsets[i].second = u32(mesh->materials.count);
+            fbx_mesh_offsets[i].first = u32(scene.meshes.size());
+            fbx_mesh_offsets[i].second = u32(mesh->materials.count);
             for (u32 j = 0; j < mesh->materials.count; ++j) {
                 ProcessMesh(i, j);
             }
@@ -55,162 +55,162 @@ namespace axiom
         return std::move(scene);
     }
 
-    void FbxImporter::ProcessTexture(u32 texIdx)
+    void FbxImporter::ProcessTexture(u32 tex_idx)
     {
-        auto& inTexture = fbx->textures[texIdx];
-        auto& outTexture = scene.textures[texIdx];
+        auto& in_texture = fbx->textures[tex_idx];
+        auto& out_texture = scene.textures[tex_idx];
 
-        textureIndices[inTexture] = texIdx;
+        texture_indices[in_texture] = tex_idx;
 
-        if (inTexture->content.size > 0) {
-            outTexture.data = scene_ir::ImageFileBuffer {
+        if (in_texture->content.size > 0) {
+            out_texture.data = scene_ir::ImageFileBuffer {
                 .data = std::vector(
-                    (const u8*)inTexture->content.data,
-                    (const u8*)inTexture->content.data + inTexture->content.size),
+                    (const u8*)in_texture->content.data,
+                    (const u8*)in_texture->content.data + in_texture->content.size),
             };
-        } else if (inTexture->has_file) {
-            outTexture.data = scene_ir::ImageFileURI(std::string(inTexture->filename.data, inTexture->filename.length));
+        } else if (in_texture->has_file) {
+            out_texture.data = scene_ir::ImageFileURI(std::string(in_texture->filename.data, in_texture->filename.length));
         } else {
             NOVA_THROW("Non-file images not currently supported");
         }
     }
 
-    void FbxImporter::ProcessMaterial(u32 matIdx)
+    void FbxImporter::ProcessMaterial(u32 mat_idx)
     {
-        auto& inMaterial = fbx->materials[matIdx];
-        auto& outMaterial = scene.materials[matIdx];
+        auto& in_material = fbx->materials[mat_idx];
+        auto& out_material = scene.materials[mat_idx];
 
-        materialIndices[inMaterial] = matIdx;
+        material_indices[in_material] = mat_idx;
 
-        auto addProperty = [&](
+        auto AddProperty = [&](
                 std::string_view name,
                 const ufbx_material_map& map) {
 
             if (map.texture_enabled && map.texture) {
-                outMaterial.properties.emplace_back(name, scene_ir::TextureSwizzle{ .textureIdx = u32(textureIndices[map.texture]) });
+                out_material.properties.emplace_back(name, scene_ir::TextureSwizzle{ .texture_idx = u32(texture_indices[map.texture]) });
             }
 
             if (map.has_value) {
                 switch (map.value_components) {
-                    break;case 1: outMaterial.properties.emplace_back(name, f32(map.value_real));
-                    break;case 2: outMaterial.properties.emplace_back(name, Vec2(f32(map.value_vec2.x), f32(map.value_vec2.y)));
-                    break;case 3: outMaterial.properties.emplace_back(name, Vec3(f32(map.value_vec3.x), f32(map.value_vec3.y), f32(map.value_vec3.z)));
-                    break;case 4: outMaterial.properties.emplace_back(name, Vec4(f32(map.value_vec4.x), f32(map.value_vec4.y), f32(map.value_vec4.z), f32(map.value_vec4.w)));
+                    break;case 1: out_material.properties.emplace_back(name, f32(map.value_real));
+                    break;case 2: out_material.properties.emplace_back(name, Vec2(f32(map.value_vec2.x), f32(map.value_vec2.y)));
+                    break;case 3: out_material.properties.emplace_back(name, Vec3(f32(map.value_vec3.x), f32(map.value_vec3.y), f32(map.value_vec3.z)));
+                    break;case 4: out_material.properties.emplace_back(name, Vec4(f32(map.value_vec4.x), f32(map.value_vec4.y), f32(map.value_vec4.z), f32(map.value_vec4.w)));
                     break;default: NOVA_THROW("Invalid number of value components: {}", map.value_components);
                 }
             }
         };
 
-        addProperty(scene_ir::property::BaseColor, inMaterial->pbr.base_color);
-        addProperty(scene_ir::property::Normal,    inMaterial->fbx.normal_map);
-        // addProperty(property::Normal,    inMaterial->pbr.normal_map);
-        // addProperty(property::Normal,    inMaterial->fbx.bump);
-        addProperty(scene_ir::property::Emissive,  inMaterial->pbr.emission_color);
+        AddProperty(scene_ir::property::BaseColor, in_material->pbr.base_color);
+        AddProperty(scene_ir::property::Normal,    in_material->fbx.normal_map);
+        // AddProperty(property::Normal,    in_material->pbr.normal_map);
+        // AddProperty(property::Normal,    in_material->fbx.bump);
+        AddProperty(scene_ir::property::Emissive,  in_material->pbr.emission_color);
 
-        addProperty(scene_ir::property::Metallic,  inMaterial->pbr.metalness);
-        addProperty(scene_ir::property::Roughness, inMaterial->pbr.roughness);
+        AddProperty(scene_ir::property::Metallic,  in_material->pbr.metalness);
+        AddProperty(scene_ir::property::Roughness, in_material->pbr.roughness);
 
-        addProperty(scene_ir::property::SpecularColor, inMaterial->fbx.specular_color);
+        AddProperty(scene_ir::property::SpecularColor, in_material->fbx.specular_color);
 
-        outMaterial.properties.emplace_back(scene_ir::property::AlphaMask, inMaterial->features.opacity.enabled);
+        out_material.properties.emplace_back(scene_ir::property::AlphaMask, in_material->features.opacity.enabled);
     }
 
-    void FbxImporter::ProcessMesh(u32 fbxMeshIdx, u32 primIdx)
+    void FbxImporter::ProcessMesh(u32 fbx_mesh_idx, u32 prim_idx)
     {
-        auto& inMesh = fbx->meshes[fbxMeshIdx];
-        auto& faces = inMesh->materials[primIdx];
+        auto& in_mesh = fbx->meshes[fbx_mesh_idx];
+        auto& faces = in_mesh->materials[prim_idx];
 
-        auto& outMesh = scene.meshes.emplace_back();
-        outMesh.materialIdx = materialIndices[inMesh->materials[primIdx].material];
+        auto& out_mesh = scene.meshes.emplace_back();
+        out_mesh.material_idx = material_indices[in_mesh->materials[prim_idx].material];
 
-        triIndices.resize(inMesh->max_face_triangles * 3);
-        uniqueVertices.clear();
-        vertexIndices.clear();
-        u32 vertexCount = 0;
+        tri_indices.resize(in_mesh->max_face_triangles * 3);
+        unique_vertices.clear();
+        vertex_indices.clear();
+        u32 vertex_count = 0;
 
         for (u32 i = 0; i < faces.face_indices.count; ++i) {
-            auto faceIdx = faces.face_indices[i];
-            auto face = inMesh->faces[faceIdx];
-            u32 numTris = ufbx_triangulate_face(triIndices.data(), triIndices.size(), inMesh, face);
+            auto face_idx = faces.face_indices[i];
+            auto face = in_mesh->faces[face_idx];
+            u32 num_tris = ufbx_triangulate_face(tri_indices.data(), tri_indices.size(), in_mesh, face);
 
-            for (u32 j = 0; j < numTris * 3; ++j) {
-                u32 index = triIndices[j];
+            for (u32 j = 0; j < num_tris * 3; ++j) {
+                u32 index = tri_indices[j];
 
                 FbxVertex v;
                 {
-                    auto pos = inMesh->vertex_position.values[inMesh->vertex_position.indices[index]];
+                    auto pos = in_mesh->vertex_position.values[in_mesh->vertex_position.indices[index]];
                     v.pos = { pos.x, pos.y, pos.z };
 
-                    if (inMesh->vertex_uv.exists) {
-                        auto uv = inMesh->vertex_uv.values[inMesh->vertex_uv.indices[index]];
+                    if (in_mesh->vertex_uv.exists) {
+                        auto uv = in_mesh->vertex_uv.values[in_mesh->vertex_uv.indices[index]];
                         v.uv = { uv.x, uv.y };
                     }
-                    if (inMesh->vertex_normal.exists) {
-                        auto nrm = inMesh->vertex_normal.values[inMesh->vertex_normal.indices[index]];
+                    if (in_mesh->vertex_normal.exists) {
+                        auto nrm = in_mesh->vertex_normal.values[in_mesh->vertex_normal.indices[index]];
                         v.nrm = { nrm.x, nrm.y, nrm.z };
                     }
                 }
 
-                auto& cached = uniqueVertices[v];
+                auto& cached = unique_vertices[v];
                 if (cached.value == scene_ir::InvalidIndex) {
-                    cached.value = vertexCount++;
-                    vertexIndices.push_back(v);
+                    cached.value = vertex_count++;
+                    vertex_indices.push_back(v);
                 }
-                outMesh.indices.push_back(cached.value);
+                out_mesh.indices.push_back(cached.value);
             }
         }
 
-        outMesh.positions.resize(vertexCount);
-        for (u32 i = 0; i < vertexCount; ++i) {
-            outMesh.positions[i] = vertexIndices[i].pos;
+        out_mesh.positions.resize(vertex_count);
+        for (u32 i = 0; i < vertex_count; ++i) {
+            out_mesh.positions[i] = vertex_indices[i].pos;
         }
 
-        if (inMesh->vertex_uv.exists) {
-            outMesh.texCoords.resize(vertexCount);
-            for (u32 i = 0; i < vertexCount; ++i) {
-                outMesh.texCoords[i] = vertexIndices[i].uv;
+        if (in_mesh->vertex_uv.exists) {
+            out_mesh.tex_coords.resize(vertex_count);
+            for (u32 i = 0; i < vertex_count; ++i) {
+                out_mesh.tex_coords[i] = vertex_indices[i].uv;
             }
         }
 
-        if (inMesh->vertex_normal.exists) {
-            outMesh.normals.resize(vertexCount);
-            for (u32 i = 0; i < vertexCount; ++i) {
-                outMesh.normals[i] = vertexIndices[i].nrm;
+        if (in_mesh->vertex_normal.exists) {
+            out_mesh.normals.resize(vertex_count);
+            for (u32 i = 0; i < vertex_count; ++i) {
+                out_mesh.normals[i] = vertex_indices[i].nrm;
             }
         }
     }
 
-    void FbxImporter::ProcessNode(ufbx_node* inNode, Mat4 parentTransform)
+    void FbxImporter::ProcessNode(ufbx_node* in_node, Mat4 parent_transform)
     {
-        auto fbxt = inNode->local_transform;
+        auto fbx_tform = in_node->local_transform;
         Mat4 transform = Mat4(1.f);
         {
-            auto tv = fbxt.translation;
-            auto tr = fbxt.rotation;
-            auto ts = fbxt.scale;
+            auto tv = fbx_tform.translation;
+            auto tr = fbx_tform.rotation;
+            auto ts = fbx_tform.scale;
             auto t = glm::translate(Mat4(1.f), Vec3(f32(tv.x), f32(tv.y), f32(tv.z)));
             auto r = glm::mat4_cast(Quat(f32(tr.w), f32(tr.x), f32(tr.y), f32(tr.z)));
             auto s = glm::scale(Mat4(1.f), Vec3(f32(ts.x), f32(ts.y), f32(ts.z)));
             transform = t * r * s;
         }
-        transform = parentTransform * transform;
+        transform = parent_transform * transform;
 
-        if (inNode->mesh) {
-            auto meshIter = std::ranges::find(fbx->meshes, inNode->mesh);
-            if (meshIter == fbx->meshes.end()) {
-                NOVA_THROW("Could not find node {} in meshes!", (void*)inNode->mesh);
+        if (in_node->mesh) {
+            auto mesh_iter = std::ranges::find(fbx->meshes, in_node->mesh);
+            if (mesh_iter == fbx->meshes.end()) {
+                NOVA_THROW("Could not find node {} in meshes!", (void*)in_node->mesh);
             }
 
-            auto[meshIdx, meshCount] = fbxMeshOffsets[u32(std::distance(fbx->meshes.begin(), meshIter))];
-            for (u32 i = 0; i < meshCount; ++i) {
+            auto[mesh_idx, mesh_count] = fbx_mesh_offsets[u32(std::distance(fbx->meshes.begin(), mesh_iter))];
+            for (u32 i = 0; i < mesh_count; ++i) {
                 scene.instances.emplace_back(scene_ir::Instance {
-                    .meshIdx = meshIdx + i,
+                    .mesh_idx = mesh_idx + i,
                     .transform = transform,
                 });
             }
         }
 
-        for (auto* child : inNode->children) {
+        for (auto* child : in_node->children) {
             ProcessNode(child, transform);
         }
     }

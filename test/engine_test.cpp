@@ -74,9 +74,9 @@ struct DemoStep : axiom::Step
 
             if ((delta.x || delta.y) && glfwGetMouseButton(engine.window, GLFW_MOUSE_BUTTON_2)) {
                 renderer.rotation = glm::angleAxis(delta.x * mouse_speed, Vec3(0.f, -1.f, 0.f)) * renderer.rotation;
-                auto pitchedRot = renderer.rotation * glm::angleAxis(delta.y * mouse_speed, Vec3(-1.f, 0.f, 0.f));
-                if (glm::dot(pitchedRot * Vec3(0.f, 1.f,  0.f), Vec3(0.f, 1.f, 0.f)) >= 0.f) {
-                    renderer.rotation = pitchedRot;
+                auto pitched_rot = renderer.rotation * glm::angleAxis(delta.y * mouse_speed, Vec3(-1.f, 0.f, 0.f));
+                if (glm::dot(pitched_rot * Vec3(0.f, 1.f,  0.f), Vec3(0.f, 1.f, 0.f)) >= 0.f) {
+                    renderer.rotation = pitched_rot;
                 }
                 renderer.rotation = glm::normalize(renderer.rotation);
             }
@@ -129,8 +129,8 @@ int main(int argc, char* argv[])
         // mesh.transform = glm::mat4x3(glm::translate(Mat4(1.f), Vec3(0.f, 0.f, -10.f)));
         // scene.meshes = { &mesh, 1 };
 
-        // axiom::GltfImporter gltfImporter;
-        // auto scene_ir = gltfImporter.Import("D:/Dev/Cloned/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf");
+        // axiom::GltfImporter gltf_importer;
+        // auto scene_ir = gltf_importer.Import("D:/Dev/Cloned/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf");
         // auto scene = axiom::Compile(scene_ir);
 
         std::filesystem::path path;

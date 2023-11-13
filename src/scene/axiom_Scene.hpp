@@ -39,7 +39,7 @@ namespace axiom
 
         struct TextureSwizzle
         {
-            u32             textureIdx = InvalidIndex;
+            u32            texture_idx = InvalidIndex;
             std::array<i8, 4> channels{ -1, -1, -1, -1 };
         };
 
@@ -87,26 +87,20 @@ namespace axiom
 
                 return nullptr;
             }
-
-            // f32 alphaCutoff = 0.5f;
-            // bool  alphaMask = false;
-            // bool alphaBlend = false;
-            // bool     volume = false;
-            // bool      decal = false;
         };
 
         struct Mesh
         {
-            std::vector<Vec3> positions;
-            std::vector<Vec3>   normals;
-            std::vector<Vec2> texCoords;
-            std::vector<u32>    indices;
-            u32             materialIdx = InvalidIndex;
+            std::vector<Vec3>  positions;
+            std::vector<Vec3>    normals;
+            std::vector<Vec2> tex_coords;
+            std::vector<u32>     indices;
+            u32             material_idx = InvalidIndex;
         };
 
         struct Instance
         {
-            u32    meshIdx = InvalidIndex;
+            u32   mesh_idx = InvalidIndex;
             Mat4 transform;
         };
 

@@ -5,15 +5,15 @@
 namespace axiom
 {
     static
-    Mat4 ProjInfReversedZRH(f32 fovY, f32 aspectWbyH, f32 zNear)
+    Mat4 ProjInfReversedZRH(f32 fov_y, f32 aspect_wbh, f32 z_near)
     {
         // https://nlguillemot.wordpress.com/2016/12/07/reversed-z-in-opengl/
 
-        f32 f = 1.f / glm::tan(fovY / 2.f);
+        f32 f = 1.f / glm::tan(fov_y / 2.f);
         Mat4 proj{};
-        proj[0][0] = f / aspectWbyH;
+        proj[0][0] = f / aspect_wbh;
         proj[1][1] = f;
-        proj[3][2] = zNear; // Right, middle-bottom
+        proj[3][2] = z_near; // Right, middle-bottom
         proj[2][3] = -1.f;  // Bottom, middle-right
 
         return proj;
@@ -124,13 +124,13 @@ namespace axiom
             nova::glsl::Compile(nova::ShaderStage::Vertex, "main", "", {
                 preamble,
                 R"glsl(
-                    layout(location = 0) out vec3 outPosition;
+                    layout(location = 0) out vec3 out_position;
                     void main() {
                         Mesh mesh = pc.meshes[gl_InstanceIndex];
                         GeometryRange geom_range = pc.geometry_ranges[mesh.geometry_range];
                         Geometry geometry = pc.geometries[geom_range.geometry];
                         vec3 pos = geometry.positions[gl_VertexIndex].value;
-                        outPosition = pos;
+                        out_position = pos;
                         gl_Position = pc.view_proj * vec4(mesh.transform * vec4(pos, 1), 1);
                     }
                 )glsl"
@@ -142,18 +142,18 @@ namespace axiom
                 R"glsl(
                     #extension GL_EXT_fragment_shader_barycentric : require
 
-                    layout(location = 0) in pervertexEXT vec3 inPosition[3];
-                    layout(location = 0) out vec4 outColor;
+                    layout(location = 0) in pervertexEXT vec3 in_position[3];
+                    layout(location = 0) out vec4 out_color;
 
                     void main()
                     {
-                        vec3 v01 = inPosition[1] - inPosition[0];
-                        vec3 v02 = inPosition[2] - inPosition[0];
+                        vec3 v01 = in_position[1] - in_position[0];
+                        vec3 v02 = in_position[2] - in_position[0];
                         vec3 nrm = normalize(cross(v01, v02));
                         if (!gl_FrontFacing) {
                             nrm = -nrm;
                         }
-                        outColor = vec4((nrm * 0.5 + 0.5) * 0.75, 1.0);
+                        out_color = vec4((nrm * 0.5 + 0.5) * 0.75, 1.0);
                     }
                 )glsl"
             })
@@ -317,9 +317,9 @@ namespace axiom
 
         f32 aspect = f32(extent.x) / f32(extent.y);
         auto proj = ProjInfReversedZRH(fov, aspect, 0.01f);
-        auto mTranslation = glm::translate(glm::mat4(1.f), position);
-        auto mRotation = glm::mat4_cast(rotation);
-        auto view = glm::affineInverse(mTranslation * mRotation);
+        auto pos_tform = glm::translate(glm::mat4(1.f), position);
+        auto rot_tform = glm::mat4_cast(rotation);
+        auto view = glm::affineInverse(pos_tform * rot_tform);
 
         cmd.PushConstants(GPU_PushConstants {
             .geometries_va = geometries.GetAddress(),

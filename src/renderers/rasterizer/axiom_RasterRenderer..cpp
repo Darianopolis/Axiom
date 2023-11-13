@@ -9,15 +9,15 @@
 
 namespace axiom
 {
-    static Mat4 ProjInfReversedZRH(f32 fovY, f32 aspectWbyH, f32 zNear)
+    static Mat4 ProjInfReversedZRH(f32 fov_y, f32 aspect_wbh, f32 z_near)
     {
         // https://nlguillemot.wordpress.com/2016/12/07/reversed-z-in-opengl/
 
-        f32 f = 1.f / glm::tan(fovY / 2.f);
+        f32 f = 1.f / glm::tan(fov_y / 2.f);
         Mat4 proj{};
-        proj[0][0] = f / aspectWbyH;
+        proj[0][0] = f / aspect_wbh;
         proj[1][1] = f;
-        proj[3][2] = zNear; // Right, middle-bottom
+        proj[3][2] = z_near; // Right, middle-bottom
         proj[2][3] = -1.f;  // Bottom, middle-right
 
         return proj;
@@ -31,28 +31,28 @@ namespace axiom
 
         nova::Context context;
 
-        nova::Buffer positionAttributeBuffer;
-        nova::Buffer  shadingAttributeBuffer;
-        nova::Buffer             indexBuffer;
+        nova::Buffer position_attribute_buffer;
+        nova::Buffer  shading_attribute_buffer;
+        nova::Buffer              index_buffer;
 
-        nova::HashMap<void*, std::pair<i32, u32>> meshOffsets;
+        nova::HashMap<void*, std::pair<i32, u32>> mesh_offsets;
 
-        nova::Buffer transformBuffer;
+        nova::Buffer transform_buffer;
 
-        nova::Buffer indirectBuffer;
-        u32           indirectCount;
+        nova::Buffer indirect_buffer;
+        u32           indirect_count;
 
-        nova::Shader   vertexShader;
-        nova::Shader fragmentShader;
+        nova::Shader   vertex_shader;
+        nova::Shader fragment_shader;
 
-        nova::Texture depthImage;
+        nova::Texture depth_image;
 
-        Mat4 viewProj;
+        Mat4 view_proj;
 
         RasterRenderer();
         ~RasterRenderer();
 
-        virtual void CompileScene(CompiledScene& scene, nova::CommandPool cmdPool, nova::Fence fence);
+        virtual void CompileScene(CompiledScene& scene, nova::CommandPool cmd_pool, nova::Fence fence);
 
         virtual void SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov);
         virtual void Record(nova::CommandList cmd, nova::Texture target);
@@ -74,79 +74,79 @@ namespace axiom
 
     RasterRenderer::~RasterRenderer()
     {
-        positionAttributeBuffer.Destroy();
-        shadingAttributeBuffer.Destroy();
-        indexBuffer.Destroy();
-        transformBuffer.Destroy();
-        indirectBuffer.Destroy();
+        position_attribute_buffer.Destroy();
+        shading_attribute_buffer.Destroy();
+        index_buffer.Destroy();
+        transform_buffer.Destroy();
+        indirect_buffer.Destroy();
 
-        vertexShader.Destroy();
-        fragmentShader.Destroy();
+        vertex_shader.Destroy();
+        fragment_shader.Destroy();
 
-        depthImage.Destroy();
+        depth_image.Destroy();
     }
 
-    void RasterRenderer::CompileScene(CompiledScene& _scene, nova::CommandPool cmdPool, nova::Fence fence)
+    void RasterRenderer::CompileScene(CompiledScene& _scene, nova::CommandPool cmd_pool, nova::Fence fence)
     {
-        (void)cmdPool;
+        (void)cmd_pool;
         (void)fence;
 
         scene = &_scene;
 
-        u64 vertexCount = 0;
-        u64 indexCount = 0;
+        u64 vertex_count = 0;
+        u64 index_count = 0;
         for (auto& mesh : scene->meshes) {
-            vertexCount += mesh->positionAttributes.size();
-            indexCount += mesh->indices.size();
+            vertex_count += mesh->position_attributes.size();
+            index_count += mesh->indices.size();
         }
 
 #ifdef AXIOM_TRACE_COMPILE // --------------------------------------------------
-        NOVA_LOG("Compiling, unique vertices = {}, unique indices = {}", vertexCount, indexCount);
+        NOVA_LOG("Compiling, unique vertices = {}, unique indices = {}", vertex_count, index_count);
 #endif // ----------------------------------------------------------------------
 
-        positionAttributeBuffer = nova::Buffer::Create(context,
-            vertexCount * sizeof(Vec3),
+        position_attribute_buffer = nova::Buffer::Create(context,
+            vertex_count * sizeof(Vec3),
             nova::BufferUsage::Storage,
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
-        shadingAttributeBuffer = nova::Buffer::Create(context,
-            vertexCount * sizeof(ShadingAttributes),
+        shading_attribute_buffer = nova::Buffer::Create(context,
+            vertex_count * sizeof(ShadingAttributes),
             nova::BufferUsage::Storage,
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
-        indexBuffer = nova::Buffer::Create(context,
-            indexCount * sizeof(u32),
+        index_buffer = nova::Buffer::Create(context,
+            index_count * sizeof(u32),
             nova::BufferUsage::Index,
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
-        u64 vertexOffset = 0;
-        u64 indexOffset = 0;
+        u64 vertex_offset = 0;
+        u64 index_offset = 0;
         for (auto& mesh : scene->meshes) {
-            meshOffsets[mesh.Raw()] = { i32(vertexOffset), u32(indexOffset) };
+            mesh_offsets[mesh.Raw()] = { i32(vertex_offset), u32(index_offset) };
 
-            positionAttributeBuffer.Set<Vec3>(mesh->positionAttributes, vertexOffset);
-            shadingAttributeBuffer.Set<ShadingAttributes>(mesh->shadingAttributes, vertexOffset);
-            vertexOffset += mesh->positionAttributes.size();
+            position_attribute_buffer.Set<Vec3>(mesh->position_attributes, vertex_offset);
+            shading_attribute_buffer.Set<ShadingAttributes>(mesh->shading_attributes, vertex_offset);
+            vertex_offset += mesh->position_attributes.size();
 
-            indexBuffer.Set<u32>(mesh->indices, indexOffset);
-            indexOffset += mesh->indices.size();
+            index_buffer.Set<u32>(mesh->indices, index_offset);
+            index_offset += mesh->indices.size();
         }
 
-        transformBuffer = nova::Buffer::Create(context, scene->instances.size() * sizeof Mat4,
+        transform_buffer = nova::Buffer::Create(context, scene->instances.size() * sizeof Mat4,
             nova::BufferUsage::Storage,
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
-        indirectBuffer = nova::Buffer::Create(context, scene->instances.size() * sizeof VkDrawIndexedIndirectCommand,
+        indirect_buffer = nova::Buffer::Create(context, scene->instances.size() * sizeof VkDrawIndexedIndirectCommand,
             nova::BufferUsage::Indirect,
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
-        transformBuffer.Set<Mat4>({Mat4(1.f)});
+        transform_buffer.Set<Mat4>({Mat4(1.f)});
 
-        indirectCount = u32(scene->instances.size());
+        indirect_count = u32(scene->instances.size());
         for (u32 i = 0; i < scene->instances.size(); ++i) {
             auto& instance = scene->instances[i];
-            auto& offsets = meshOffsets.at(instance->mesh.Raw());
-            indirectBuffer.Set<VkDrawIndexedIndirectCommand>({{
+            auto& offsets = mesh_offsets.at(instance->mesh.Raw());
+            indirect_buffer.Set<VkDrawIndexedIndirectCommand>({{
                 .indexCount = u32(instance->mesh->indices.size()),
                 .instanceCount = 1,
                 .firstIndex = offsets.second,
@@ -154,31 +154,31 @@ namespace axiom
                 .firstInstance = i,
             }}, i);
 
-            transformBuffer.Set<Mat4>({instance->transform}, i);
+            transform_buffer.Set<Mat4>({instance->transform}, i);
         }
 
-        vertexShader = nova::Shader::Create(context, nova::ShaderStage::Vertex, "main",
+        vertex_shader = nova::Shader::Create(context, nova::ShaderStage::Vertex, "main",
             nova::glsl::Compile( nova::ShaderStage::Vertex, "main", "src/renderers/rasterizer/axiom_Vertex.glsl", {}));
 
-        fragmentShader = nova::Shader::Create(context, nova::ShaderStage::Fragment, "main",
+        fragment_shader = nova::Shader::Create(context, nova::ShaderStage::Fragment, "main",
             nova::glsl::Compile(nova::ShaderStage::Fragment, "main", "src/renderers/rasterizer/axiom_Fragment.glsl", {}));
     }
 
     void RasterRenderer::SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov)
     {
         auto proj = ProjInfReversedZRH(fov, aspect, 0.01f);
-        auto mTranslation = glm::translate(glm::mat4(1.f), position);
-        auto mRotation = glm::mat4_cast(rotation);
-        auto view = glm::affineInverse(mTranslation * mRotation);
-        viewProj = proj * view;
+        auto pos_tform = glm::translate(glm::mat4(1.f), position);
+        auto rot_tform = glm::mat4_cast(rotation);
+        auto view = glm::affineInverse(pos_tform * rot_tform);
+        view_proj = proj * view;
     }
 
     void RasterRenderer::Record(nova::CommandList cmd, nova::Texture target)
     {
-        if (!depthImage || depthImage.GetExtent() != target.GetExtent()) {
-            depthImage.Destroy();
+        if (!depth_image || depth_image.GetExtent() != target.GetExtent()) {
+            depth_image.Destroy();
 
-            depthImage = nova::Texture::Create(context, { Vec2U(target.GetExtent()), 0 },
+            depth_image = nova::Texture::Create(context, { Vec2U(target.GetExtent()), 0 },
                 nova::TextureUsage::DepthStencilAttach,
                 nova::Format::D32_SFloat,
                 {});
@@ -191,27 +191,27 @@ namespace axiom
         cmd.SetViewports({{{0, size.y}, Vec2I(size.x, -i32(size.y))}}, true);
         cmd.SetDepthState(true, true, nova::CompareOp::Greater);
         cmd.SetCullState(nova::CullMode::None, nova::FrontFace::CounterClockwise);
-        cmd.BindShaders({ vertexShader, fragmentShader });
+        cmd.BindShaders({ vertex_shader, fragment_shader });
 
         struct PushConstants
         {
-            u64 positionAttributes;
-            u64  shadingAttributes;
-            u64          instances;
-            Mat4          viewProj;
+            u64 position_attributes;
+            u64  shading_attributes;
+            u64           instances;
+            Mat4          view_proj;
         };
 
-        cmd.BeginRendering({{}, size}, {target}, depthImage);
+        cmd.BeginRendering({{}, size}, {target}, depth_image);
         cmd.ClearColor(0, Vec4(Vec3(0.2f), 1.f), Vec2(size));
         cmd.ClearDepth(0.f, Vec2(size));
-        cmd.BindIndexBuffer(indexBuffer, nova::IndexType::U32);
+        cmd.BindIndexBuffer(index_buffer, nova::IndexType::U32);
         cmd.PushConstants(PushConstants {
-            .positionAttributes = positionAttributeBuffer.GetAddress(),
-            .shadingAttributes = shadingAttributeBuffer.GetAddress(),
-            .instances = transformBuffer.GetAddress(),
-            .viewProj = viewProj,
+            .position_attributes = position_attribute_buffer.GetAddress(),
+            .shading_attributes = shading_attribute_buffer.GetAddress(),
+            .instances = transform_buffer.GetAddress(),
+            .view_proj = view_proj,
         });
-        cmd.DrawIndexedIndirect(indirectBuffer, 0, indirectCount, sizeof(VkDrawIndexedIndirectCommand));
+        cmd.DrawIndexedIndirect(indirect_buffer, 0, indirect_count, sizeof(VkDrawIndexedIndirectCommand));
         cmd.EndRendering();
     }
 }

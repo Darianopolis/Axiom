@@ -62,21 +62,21 @@ namespace axiom
         u32           width;
         u32          height;
         nova::Format format;
-        f32        minAlpha;
-        f32        maxAlpha;
+        f32        min_alpha;
+        f32        max_alpha;
         u32            size;
     };
 
     struct GPU_TangentSpace
     {
         // https://johnwhite3d.blogspot.com/2017/10/signed-octahedron-normal-encoding.html?view=classic
-        u32 octX : 10;
-        u32 octY : 10;
-        u32 octS :  1;
+        u32 oct_x : 10;
+        u32 oct_y : 10;
+        u32 oct_s :  1;
 
         // https://www.jeremyong.com/graphics/2023/01/09/tangent-spaces-and-diamond-encoding/
-        u32 tgtA : 10;
-        u32 tgtS :  1;
+        u32 tgt_a : 10;
+        u32 tgt_s :  1;
     };
 
     struct GPU_TexCoords
@@ -86,8 +86,8 @@ namespace axiom
 
     struct GPU_BoneWeights
     {
-        u32 boneIndices[2];
-        u32 boneWeights[2];
+        u32 bone_indices[2];
+        u32 bone_weights[2];
     };
 
     class MeshProcessor
@@ -99,21 +99,21 @@ namespace axiom
             Vec3 bitangent;
         };
 
-        std::vector<TangentSpace> vertexTangentSpaces;
+        std::vector<TangentSpace> vertex_tangent_spaces;
 
     public:
         void ProcessMesh(
-             InStridedRegion      inPositions,
-             InStridedRegion        inNormals,
-             InStridedRegion      inTexCoords,
-             InStridedRegion        inIndices,
-            OutStridedRegion outTangentSpaces,
-            OutStridedRegion     outTexCoords);
+             InStridedRegion       in_positions,
+             InStridedRegion         in_normals,
+             InStridedRegion      in_tex_coords,
+             InStridedRegion         in_indices,
+            OutStridedRegion out_tangent_spaces,
+            OutStridedRegion     out_tex_coords);
 
-        bool flipUVs = false;
+        bool flip_uvs = false;
     };
 
-    inline thread_local MeshProcessor s_MeshProcessor;
+    inline thread_local MeshProcessor S_MeshProcessor;
 
     class ImageProcessor
     {
@@ -126,15 +126,15 @@ namespace axiom
         std::vector<char> data;
         nova::Format    format;
 
-        f32 minAlpha = 0.f;
-        f32 maxAlpha = 1.f;
+        f32 min_alpha = 0.f;
+        f32 max_alpha = 1.f;
 
     public:
         void ProcessImage(
             const char*       path,
-            usz       embeddedSize,
+            usz      embedded_size,
             ImageType         type,
-            i32             maxDim,
+            i32            max_dim,
             ImageProcess processes);
 
         const void* GetImageData();
@@ -142,9 +142,9 @@ namespace axiom
         Vec2U GetImageDimensions();
         nova::Format GetImageFormat();
 
-        f32 GetMinAlpha() { return minAlpha; }
-        f32 GetMaxAlpha() { return maxAlpha; }
+        f32 GetMinAlpha() { return min_alpha; }
+        f32 GetMaxAlpha() { return max_alpha; }
     };
 
-    inline thread_local ImageProcessor s_ImageProcessor;
+    inline thread_local ImageProcessor S_ImageProcessor;
 }

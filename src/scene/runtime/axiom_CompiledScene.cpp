@@ -4,12 +4,12 @@ namespace axiom
 {
     void CompiledScene::Compile(imp::Scene& scene)
     {
-        auto defaultMaterial = Ref<UVMaterial>::Create();
-        materials.push_back(defaultMaterial);
+        auto default_material = Ref<UVMaterial>::Create();
+        materials.push_back(default_material);
 
-        nova::HashMap<u32, u32> singlePixelTextures;
+        nova::HashMap<u32, u32> single_pixel_textures;
 
-        auto createPixelImage = [&](Vec4 value) {
+        auto CreatePixelImage = [&](Vec4 value) {
             std::array<u8, 4> data {
                 u8(value.r * 255.f),
                 u8(value.g * 255.f),
@@ -19,8 +19,8 @@ namespace axiom
 
             u32 encoded = std::bit_cast<u32>(data);
 
-            if (singlePixelTextures.contains(encoded)) {
-                return textures[singlePixelTextures.at(encoded)];
+            if (single_pixel_textures.contains(encoded)) {
+                return textures[single_pixel_textures.at(encoded)];
             }
 
             auto image = Ref<UVTexture>::Create();
@@ -28,16 +28,16 @@ namespace axiom
             image->data = { b8(data[0]), b8(data[1]), b8(data[2]), b8(data[3]) };
 
             textures.push_back(image);
-            singlePixelTextures.insert({ encoded, u32(textures.size() - 1) });
+            single_pixel_textures.insert({ encoded, u32(textures.size() - 1) });
 
             return image;
         };
 
-        defaultMaterial->baseColor_alpha = createPixelImage({ 1.f, 0.f, 1.f, 1.f });
-        defaultMaterial->normals = createPixelImage({ 0.5f, 0.5f, 1.f, 1.f });
-        defaultMaterial->metalness_roughness = createPixelImage({ 0.f, 0.5f, 0.f, 1.f });
-        defaultMaterial->emissivity = createPixelImage({ 0.f, 0.f, 0.f, 1.f });
-        defaultMaterial->transmission = createPixelImage({ 0.f, 0.f, 0.f, 255.f });
+        default_material->basecolor_alpha = CreatePixelImage({ 1.f, 0.f, 1.f, 1.f });
+        default_material->normals = CreatePixelImage({ 0.5f, 0.5f, 1.f, 1.f });
+        default_material->metalness_roughness = CreatePixelImage({ 0.f, 0.5f, 0.f, 1.f });
+        default_material->emissivity = CreatePixelImage({ 0.f, 0.f, 0.f, 1.f });
+        default_material->transmission = CreatePixelImage({ 0.f, 0.f, 0.f, 255.f });
 
         for (u32 i = 0; i < scene.geometry_ranges.count; ++i) {
             auto& range = scene.geometry_ranges[i];
@@ -46,35 +46,35 @@ namespace axiom
             u32 index_count = range.triangle_count * 3;
             u32 vertex_count = range.max_vertex + 1;
 
-            auto outMesh = Ref<TriMesh>::Create();
-            meshes.emplace_back(outMesh);
+            auto out_mesh = Ref<TriMesh>::Create();
+            meshes.emplace_back(out_mesh);
 
-            outMesh->indices.resize(index_count);
-            outMesh->positionAttributes.resize(vertex_count);
-            outMesh->shadingAttributes.resize(vertex_count);
+            out_mesh->indices.resize(index_count);
+            out_mesh->position_attributes.resize(vertex_count);
+            out_mesh->shading_attributes.resize(vertex_count);
 
             geometry.indices
                 .Slice(range.first_index, index_count)
-                .CopyTo({ outMesh->indices.data(), index_count });
+                .CopyTo({ out_mesh->indices.data(), index_count });
 
             geometry.positions
                 .Slice(range.vertex_offset, vertex_count)
-                .CopyTo({ outMesh->positionAttributes.data(), vertex_count });
+                .CopyTo({ out_mesh->position_attributes.data(), vertex_count });
 
             geometry.tangent_spaces
                 .Slice(range.vertex_offset, vertex_count)
-                .CopyTo({ (imp::Basis*)&outMesh->shadingAttributes[0].tangentSpace, vertex_count, sizeof(outMesh->shadingAttributes[0]) });
+                .CopyTo({ (imp::Basis*)&out_mesh->shading_attributes[0].tangent_space, vertex_count, sizeof(out_mesh->shading_attributes[0]) });
 
             geometry.tex_coords
                 .Slice(range.vertex_offset, vertex_count)
-                .CopyTo({ (imp::Vec2<imp::Float16>*)&outMesh->shadingAttributes[0].texCoords, vertex_count, sizeof(outMesh->shadingAttributes[0]) });
+                .CopyTo({ (imp::Vec2<imp::Float16>*)&out_mesh->shading_attributes[0].tex_coords, vertex_count, sizeof(out_mesh->shading_attributes[0]) });
 
-            outMesh->subMeshes.emplace_back(TriSubMesh {
-                .vertexOffset = 0,
-                .maxVertex = vertex_count - 1,
-                .firstIndex = 0,
-                .indexCount = index_count,
-                .material = defaultMaterial,
+            out_mesh->sub_meshes.emplace_back(TriSubMesh {
+                .vertex_offset = 0,
+                .max_vertex = vertex_count - 1,
+                .first_index = 0,
+                .index_count = index_count,
+                .material = default_material,
             });
         }
 

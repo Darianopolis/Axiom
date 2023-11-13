@@ -14,13 +14,13 @@ namespace axiom
 
         scene_ir::Scene scene;
 
-        std::vector<std::pair<u32, u32>> gltfMeshOffsets;
+        std::vector<std::pair<u32, u32>> gltf_mesh_offsets;
 
         void Reset();
-        void ProcessTexture(u32 texIdx);
-        void ProcessMaterial(u32 matIdx);
-        void ProcessMesh(u32 gltfMeshIdx, u32 primIdx);
-        void ProcessNode(usz nodeIdx, Mat4 parentTransform);
+        void ProcessTexture(u32 tex_idx);
+        void ProcessMaterial(u32 mat_idx);
+        void ProcessMesh(u32 gltf_mesh_idx, u32 prim_idx);
+        void ProcessNode(usz node_idx, Mat4 parent_transform);
 
         scene_ir::Scene Import(const std::filesystem::path& path);
     };

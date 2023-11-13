@@ -23,13 +23,13 @@ namespace axiom
     struct Renderer : nova::RefCounted
     {
         f32         exposure = 1.f;
-        u32     sampleRadius = 1;
+        u32    sample_radius = 1;
         ToneMappingMode mode = ToneMappingMode::None;
 
     public:
         virtual ~Renderer() = 0;
 
-        virtual void CompileScene(CompiledScene& scene, nova::CommandPool cmdPool, nova::Fence fence) = 0;
+        virtual void CompileScene(CompiledScene& scene, nova::CommandPool cmd_pool, nova::Fence fence) = 0;
 
         virtual void ResetSamples() = 0;
         virtual void SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov) = 0;

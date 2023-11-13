@@ -15,48 +15,48 @@ namespace axiom
 
         nova::Format format = nova::Format::RGBA8_UNorm;
 
-        f32 minAlpha = 1.f;
-        f32 maxAlpha = 0.f;
+        f32 min_alpha = 1.f;
+        f32 max_alpha = 0.f;
     };
 
     struct UVMaterial : nova::RefCounted
     {
-        nova::Ref<UVTexture>     baseColor_alpha;
+        nova::Ref<UVTexture>     basecolor_alpha;
         nova::Ref<UVTexture>             normals;
         nova::Ref<UVTexture>          emissivity;
         nova::Ref<UVTexture>        transmission;
         nova::Ref<UVTexture> metalness_roughness;
 
-        f32  alphaCutoff = 0.5f;
-        bool   alphaMask = false;
-        bool  alphaBlend = false;
-        bool        thin = false;
-        bool  subsurface = false;
-        bool       decal = false;
+        f32  alpha_cutoff = 0.5f;
+        bool   alpha_mask = false;
+        bool  alpha_blend = false;
+        bool         thin = false;
+        bool   subsurface = false;
+        bool        decal = false;
     };
 
     struct TriSubMesh
     {
-        u32               vertexOffset;
-        u32                  maxVertex;
-        u32                 firstIndex;
-        u32                 indexCount;
+        u32              vertex_offset;
+        u32                 max_vertex;
+        u32                first_index;
+        u32                index_count;
         nova::Ref<UVMaterial> material;
     };
 
     struct ShadingAttributes
     {
-        GPU_TangentSpace tangentSpace;
-        GPU_TexCoords       texCoords;
+        GPU_TangentSpace tangent_space;
+        GPU_TexCoords       tex_coords;
     };
 
     struct TriMesh : nova::RefCounted
     {
-        std::vector<Vec3>             positionAttributes;
-        std::vector<ShadingAttributes> shadingAttributes;
-        std::vector<u32>                         indices;
+        std::vector<Vec3>             position_attributes;
+        std::vector<ShadingAttributes> shading_attributes;
+        std::vector<u32>                          indices;
 
-        std::vector<TriSubMesh> subMeshes;
+        std::vector<TriSubMesh> sub_meshes;
     };
 
     struct TriMeshInstance : nova::RefCounted
@@ -75,18 +75,18 @@ namespace axiom
         inline
         void DebugDump()
         {
-            for (auto[meshIdx, mesh] : meshes | std::views::enumerate) {
-                NOVA_LOG("Mesh[{}]", meshIdx);
+            for (auto[mesh_idx, mesh] : meshes | std::views::enumerate) {
+                NOVA_LOG("Mesh[{}]", mesh_idx);
                 NOVA_LOGEXPR(mesh->indices.size());
-                NOVA_LOGEXPR(mesh->shadingAttributes.size());
-                NOVA_LOGEXPR(mesh->positionAttributes.size());
-                NOVA_LOGEXPR(mesh->subMeshes.size());
-                for (auto[subMeshIdx, subMesh] : mesh->subMeshes | std::views::enumerate) {
-                    NOVA_LOG("Submesh[{}]", subMeshIdx);
-                    NOVA_LOGEXPR(subMesh.vertexOffset);
-                    NOVA_LOGEXPR(subMesh.maxVertex);
-                    NOVA_LOGEXPR(subMesh.firstIndex);
-                    NOVA_LOGEXPR(subMesh.indexCount);
+                NOVA_LOGEXPR(mesh->shading_attributes.size());
+                NOVA_LOGEXPR(mesh->position_attributes.size());
+                NOVA_LOGEXPR(mesh->sub_meshes.size());
+                for (auto[sub_mesh_idx, sub_mesh] : mesh->sub_meshes | std::views::enumerate) {
+                    NOVA_LOG("Submesh[{}]", sub_mesh_idx);
+                    NOVA_LOGEXPR(sub_mesh.vertex_offset);
+                    NOVA_LOGEXPR(sub_mesh.max_vertex);
+                    NOVA_LOGEXPR(sub_mesh.first_index);
+                    NOVA_LOGEXPR(sub_mesh.index_count);
                 }
             }
         }

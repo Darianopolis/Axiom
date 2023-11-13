@@ -33,28 +33,28 @@ constexpr std::string_view UsageString =
 int main(int argc, char* argv[])
 {
     axiom::SceneCompiler compiler;
-    axiom::GltfImporter gltfImporter;
-    axiom::FbxImporter fbxImporter;
-    axiom::AssimpImporter assimpImporter;
+    axiom::GltfImporter gltf_importer;
+    axiom::FbxImporter fbx_importer;
+    axiom::AssimpImporter assimp_importer;
 
-    bool pathTrace = false;
+    bool path_trace = false;
     bool raster = false;
-    bool useAssimp = false;
+    bool use_assimp = false;
     std::vector<std::filesystem::path> paths;
 
     for (i32 i = 1; i < argc; ++i) {
         std::string_view arg = argv[i];
 
         if (arg == "--path-trace") {
-            pathTrace = true;
+            path_trace = true;
         } else if (arg == "--raster") {
             raster = true;
         } else if (arg == "--flip-uvs") {
-            compiler.flipUVs = true;
+            compiler.flip_uvs = true;
         } else if (arg == "--flip-nmap-z") {
-            compiler.flipNormalMapZ = true;
+            compiler.flip_normal_map_z = true;
         } else if (arg == "--assimp") {
-            useAssimp = true;
+            use_assimp = true;
         } else {
             try {
                 auto path = std::filesystem::path(arg);
@@ -75,9 +75,9 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    if (!(pathTrace | raster)) {
+    if (!(path_trace | raster)) {
         NOVA_LOG("No render mode selected, defaulting to path tracing");
-        pathTrace = true;
+        path_trace = true;
     }
 
 // -----------------------------------------------------------------------------
@@ -88,7 +88,7 @@ int main(int argc, char* argv[])
     NOVA_TIMEIT_RESET();
 // -----------------------------------------------------------------------------
 
-    axiom::CompiledScene compiledScene;
+    axiom::CompiledScene compiled_scene;
 
     for (auto& path : paths) {
         auto ext = path.extension().string();
@@ -96,18 +96,18 @@ int main(int argc, char* argv[])
 
         axiom::scene_ir::Scene scene;
 
-        if (useAssimp) {
-            scene = assimpImporter.Import(path);
+        if (use_assimp) {
+            scene = assimp_importer.Import(path);
         } else if (ext == ".gltf" || ext == ".glb") {
-            scene = gltfImporter.Import(path);
+            scene = gltf_importer.Import(path);
         } else if (ext == ".fbx") {
-            scene = fbxImporter.Import(path);
+            scene = fbx_importer.Import(path);
         } else {
-            scene = assimpImporter.Import(path);
+            scene = assimp_importer.Import(path);
         }
 
         // scene.Debug();
-        compiler.Compile(scene, compiledScene);
+        compiler.Compile(scene, compiled_scene);
     }
 
     // {
@@ -117,7 +117,7 @@ int main(int argc, char* argv[])
     //     importer.LoadFile(path);
     //     importer.ReportStatistics();
     //     auto scene = importer.GenerateScene();
-    //     compiledScene.Compile(scene);
+    //     compiled_scene.Compile(scene);
     // }
 
 // -----------------------------------------------------------------------------
@@ -132,12 +132,12 @@ int main(int argc, char* argv[])
     });
     auto queue = context.GetQueue(nova::QueueFlags::Graphics, 0);
     auto fence = nova::Fence::Create(context);
-    auto cmdPool = nova::CommandPool::Create(context, queue);
+    auto cmd_pool = nova::CommandPool::Create(context, queue);
     auto sampler = nova::Sampler::Create(context, nova::Filter::Linear,
         nova::AddressMode::Repeat, nova::BorderColor::TransparentBlack, 0.f);
     NOVA_DEFER(&) {
         fence.Wait();
-        cmdPool.Destroy();
+        cmd_pool.Destroy();
         sampler.Destroy();
         fence.Destroy();
         context.Destroy();
@@ -149,12 +149,12 @@ int main(int argc, char* argv[])
 // -----------------------------------------------------------------------------
 
     nova::Ref<axiom::Renderer> renderer;
-    if (pathTrace) {
+    if (path_trace) {
         renderer = axiom::CreatePathTraceRenderer(context);
     } else if (raster) {
         renderer = axiom::CreateRasterRenderer(context);
     }
-    renderer->CompileScene(compiledScene, cmdPool, fence);
+    renderer->CompileScene(compiled_scene, cmd_pool, fence);
 
 // -----------------------------------------------------------------------------
     NOVA_TIMEIT("compile-scene");
@@ -178,18 +178,18 @@ int main(int argc, char* argv[])
         swapchain.Destroy();
     };
 
-    static f32 moveSpeed = 1.f;
+    static f32 move_speed = 1.f;
     glfwSetScrollCallback(window, [](auto, f64, f64 dy) {
         if (!ImGui::GetIO().WantCaptureMouse) {
-            if (dy > 0) moveSpeed *= 1.5f;
-            if (dy < 0) moveSpeed /= 1.5f;
+            if (dy > 0) move_speed *= 1.5f;
+            if (dy < 0) move_speed /= 1.5f;
         }
     });
 
-    static bool showSettings = true;
+    static bool show_settings = true;
     glfwSetKeyCallback(window, [](auto, int key, int scancode, int action, int mods) {
         if (key == GLFW_KEY_F1 && action == GLFW_PRESS) {
-            showSettings = !showSettings;
+            show_settings = !show_settings;
         }
     });
 
@@ -229,17 +229,17 @@ int main(int argc, char* argv[])
 
     rotation = glm::normalize(rotation);
 
-    auto lastUpdateTime = std::chrono::steady_clock::now();
-    auto lastReportTime = lastUpdateTime;
+    auto last_update_time = std::chrono::steady_clock::now();
+    auto last_report_time = last_update_time;
     u64 frames = 0;
     f32 fps = 0.f;
-    i64 allocatedMem = 0;
-    i64 allocationCountActive = 0;
-    i64 allocationCountRate = 0;
+    i64 allocated_mem = 0;
+    i64 allocation_count_active = 0;
+    i64 allocation_count_rate = 0;
 
-    POINT savedPos{ 0, 0 };
-    bool lastMouseDrag = false;
-    f32 mouseSpeed = 0.0025f;
+    POINT saved_pos{ 0, 0 };
+    bool last_mouse_drag = false;
+    f32 mouse_speed = 0.0025f;
 
 
     /*
@@ -300,21 +300,21 @@ int main(int argc, char* argv[])
 
         using namespace std::chrono;
         auto now = steady_clock::now();
-        auto timeStep = duration_cast<duration<f32>>(now - lastUpdateTime).count();
-        lastUpdateTime = now;
+        auto delta_time = duration_cast<duration<f32>>(now - last_update_time).count();
+        last_update_time = now;
 
         // FPS
 
         frames++;
-        if (now - lastReportTime > 1s)
+        if (now - last_report_time > 1s)
         {
-            fps = frames / duration_cast<duration<f32>>(now - lastReportTime).count();
-            lastReportTime = now;
+            fps = frames / duration_cast<duration<f32>>(now - last_report_time).count();
+            last_report_time = now;
             frames = 0;
 
-            allocatedMem = nova::rhi::stats::MemoryAllocated.load();
-            allocationCountActive = nova::rhi::stats::AllocationCount.load();
-            allocationCountRate = nova::rhi::stats::NewAllocationCount.exchange(0);
+            allocated_mem = nova::rhi::stats::MemoryAllocated.load();
+            allocation_count_active = nova::rhi::stats::AllocationCount.load();
+            allocation_count_rate = nova::rhi::stats::NewAllocationCount.exchange(0);
         }
 
         // Camera
@@ -328,7 +328,7 @@ int main(int argc, char* argv[])
             if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT)) translate += Vec3( 0.f, -1.f,  0.f);
             if (glfwGetKey(window, GLFW_KEY_SPACE))      translate += Vec3( 0.f,  1.f,  0.f);
             if (translate.x || translate.y || translate.z) {
-                position += rotation * (glm::normalize(translate) * moveSpeed * timeStep);
+                position += rotation * (glm::normalize(translate) * move_speed * delta_time);
             }
         }
 
@@ -337,26 +337,26 @@ int main(int argc, char* argv[])
             if (GetFocus() == glfwGetWin32Window(window) && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_2)) {
                 POINT p;
                 GetCursorPos(&p);
-                LONG dx = p.x - savedPos.x;
-                LONG dy = p.y - savedPos.y;
-                if (lastMouseDrag) {
+                LONG dx = p.x - saved_pos.x;
+                LONG dy = p.y - saved_pos.y;
+                if (last_mouse_drag) {
                     delta = { f32(dx), f32(dy) };
                 } else {
-                    GetCursorPos(&savedPos);
+                    GetCursorPos(&saved_pos);
                     ShowCursor(false);
-                    lastMouseDrag = true;
+                    last_mouse_drag = true;
                 }
-                SetCursorPos(savedPos.x, savedPos.y);
-            } else if (lastMouseDrag) {
+                SetCursorPos(saved_pos.x, saved_pos.y);
+            } else if (last_mouse_drag) {
                 ShowCursor(true);
-                lastMouseDrag = false;
+                last_mouse_drag = false;
             }
 
             if ((delta.x || delta.y) && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_2)) {
-                rotation = glm::angleAxis(delta.x * mouseSpeed, Vec3(0.f, -1.f, 0.f)) * rotation;
-                auto pitchedRot = rotation * glm::angleAxis(delta.y * mouseSpeed, Vec3(-1.f, 0.f, 0.f));
-                if (glm::dot(pitchedRot * Vec3(0.f, 1.f,  0.f), Vec3(0.f, 1.f, 0.f)) >= 0.f) {
-                    rotation = pitchedRot;
+                rotation = glm::angleAxis(delta.x * mouse_speed, Vec3(0.f, -1.f, 0.f)) * rotation;
+                auto pitched_rot = rotation * glm::angleAxis(delta.y * mouse_speed, Vec3(-1.f, 0.f, 0.f));
+                if (glm::dot(pitched_rot * Vec3(0.f, 1.f,  0.f), Vec3(0.f, 1.f, 0.f)) >= 0.f) {
+                    rotation = pitched_rot;
                 }
                 rotation = glm::normalize(rotation);
             }
@@ -364,8 +364,8 @@ int main(int argc, char* argv[])
 
         // Draw
 
-        cmdPool.Reset();
-        auto cmd = cmdPool.Begin();
+        cmd_pool.Reset();
+        auto cmd = cmd_pool.Begin();
 
         queue.Acquire({swapchain}, {fence});
 
@@ -376,17 +376,17 @@ int main(int argc, char* argv[])
 
         // UI
 
-        if (showSettings) {
+        if (show_settings) {
             ImGui::Begin("Settings (F1 to show/hide)");
             NOVA_DEFER(&) { ImGui::End(); };
 
-            ImGui::Text("Allocations: Mem = %s, Active = %i (%i / s)", nova::ByteSizeToString(allocatedMem).c_str(), allocationCountActive, allocationCountRate);
+            ImGui::Text("Allocations: Mem = %s, Active = %i (%i / s)", nova::ByteSizeToString(allocated_mem).c_str(), allocation_count_active, allocation_count_rate);
             ImGui::Text("Frametime: %s (%.2f fps)", nova::DurationToString(1s / fps).c_str(), fps);
             ImGui::Text("Position: (%.2f, %.2f, %.2f)", position.x, position.y, position.z);
             ImGui::Text("Rotation: (%.2f, %.2f, %.2f, %.2f)", rotation.x, rotation.y, rotation.z, rotation.w);
 
             ImGui::Separator();
-            if (ImGui::SliderInt("Sample Radius", reinterpret_cast<i32*>(&renderer->sampleRadius), 1, 10)) {
+            if (ImGui::SliderInt("Sample Radius", reinterpret_cast<i32*>(&renderer->sample_radius), 1, 10)) {
                 renderer->ResetSamples();
             }
             ImGui::Separator();

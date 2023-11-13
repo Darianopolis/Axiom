@@ -9,7 +9,7 @@ namespace axiom
 {
     void GltfImporter::Reset()
     {
-        gltfMeshOffsets.clear();
+        gltf_mesh_offsets.clear();
         scene.Clear();
     }
 
@@ -83,10 +83,10 @@ namespace axiom
 
         // Meshes
 
-        gltfMeshOffsets.resize(asset->meshes.size());
+        gltf_mesh_offsets.resize(asset->meshes.size());
         for (u32 i = 0; i < asset->meshes.size(); ++i) {
-            gltfMeshOffsets[i].first = u32(scene.meshes.size());
-            gltfMeshOffsets[i].second = u32(asset->meshes[i].primitives.size());
+            gltf_mesh_offsets[i].first = u32(scene.meshes.size());
+            gltf_mesh_offsets[i].second = u32(asset->meshes[i].primitives.size());
             for (u32 j = 0; j < asset->meshes[i].primitives.size(); ++j) {
                 ProcessMesh(i, j);
             }
@@ -94,52 +94,52 @@ namespace axiom
 
         // Instances
 
-        for (auto rootNodeIndex : asset->scenes[asset->defaultScene.value()].nodeIndices) {
-            ProcessNode(rootNodeIndex, Mat4(1.f));
+        for (auto root_node_index : asset->scenes[asset->defaultScene.value()].nodeIndices) {
+            ProcessNode(root_node_index, Mat4(1.f));
         }
 
         return std::move(scene);
     }
 
-    void GltfImporter::ProcessTexture(u32 texIdx)
+    void GltfImporter::ProcessTexture(u32 tex_idx)
     {
-        auto& inTexture = asset->textures[texIdx];
-        auto& outTexture = scene.textures[texIdx];
+        auto& in_texture = asset->textures[tex_idx];
+        auto& out_texture = scene.textures[tex_idx];
 
-        if (inTexture.imageIndex) {
-            auto& image = asset->images[inTexture.imageIndex.value()];
+        if (in_texture.imageIndex) {
+            auto& image = asset->images[in_texture.imageIndex.value()];
 
             std::visit(nova::Overloads {
                 [&](fastgltf::sources::URI& uri) {
-                    outTexture.data = scene_ir::ImageFileURI(std::format("{}/{}", dir.string(), uri.uri.path()));
+                    out_texture.data = scene_ir::ImageFileURI(std::format("{}/{}", dir.string(), uri.uri.path()));
                 },
                 [&](fastgltf::sources::Vector& vec) {
                     scene_ir::ImageFileBuffer source;
                     source.data.resize(vec.bytes.size());
                     std::memcpy(source.data.data(), vec.bytes.data(), vec.bytes.size());
-                    outTexture.data = std::move(source);
+                    out_texture.data = std::move(source);
                 },
-                [&](fastgltf::sources::ByteView& byteView) {
+                [&](fastgltf::sources::ByteView& byte_view) {
                     scene_ir::ImageFileBuffer source;
-                    source.data.resize(byteView.bytes.size());
-                    std::memcpy(source.data.data(), byteView.bytes.data(), byteView.bytes.size());
-                    outTexture.data = std::move(source);
+                    source.data.resize(byte_view.bytes.size());
+                    std::memcpy(source.data.data(), byte_view.bytes.data(), byte_view.bytes.size());
+                    out_texture.data = std::move(source);
                 },
-                [&](fastgltf::sources::BufferView& bufferViewIdx) {
-                    auto& view = asset->bufferViews[bufferViewIdx.bufferViewIndex];
+                [&](fastgltf::sources::BufferView& buffer_view_idx) {
+                    auto& view = asset->bufferViews[buffer_view_idx.bufferViewIndex];
                     auto& buffer = asset->buffers[view.bufferIndex];
                     auto* bytes = fastgltf::DefaultBufferDataAdapter{}(buffer) + view.byteOffset;
                     scene_ir::ImageFileBuffer source;
                     source.data.resize(view.byteLength);
                     std::memcpy(source.data.data(), bytes, view.byteLength);
-                    outTexture.data = std::move(source);
+                    out_texture.data = std::move(source);
                 },
                 [&](auto&) {
                     NOVA_THROW("Unknown image source: {}", image.data.index());
                 },
-            }, asset->images[inTexture.imageIndex.value()].data);
+            }, asset->images[in_texture.imageIndex.value()].data);
         } else {
-            outTexture.data = scene_ir::ImageBuffer{
+            out_texture.data = scene_ir::ImageBuffer{
                 .data{ 255, 0, 255, 255 },
                 .size{ 1, 1 },
                 .format = scene_ir::BufferFormat::RGBA8,
@@ -147,59 +147,59 @@ namespace axiom
         }
     }
 
-    void GltfImporter::ProcessMaterial(u32 matIdx)
+    void GltfImporter::ProcessMaterial(u32 mat_idx)
     {
-        auto& inMaterial = asset->materials[matIdx];
-        auto& outMaterial = scene.materials[matIdx];
+        auto& in_material = asset->materials[mat_idx];
+        auto& out_material = scene.materials[mat_idx];
 
-        auto addProperty = nova::Overloads {
+        auto AddProperty = nova::Overloads {
             [&](std::string_view name, fastgltf::Optional<fastgltf::TextureInfo>& texture) {
-                if (texture) outMaterial.properties.emplace_back(name, scene_ir::TextureSwizzle{ .textureIdx = u32(texture->textureIndex) }); },
+                if (texture) out_material.properties.emplace_back(name, scene_ir::TextureSwizzle{ .texture_idx = u32(texture->textureIndex) }); },
             [&](std::string_view name, fastgltf::Optional<fastgltf::NormalTextureInfo>& texture) {
-                if (texture) outMaterial.properties.emplace_back(name, scene_ir::TextureSwizzle{ .textureIdx = u32(texture->textureIndex) }); },
+                if (texture) out_material.properties.emplace_back(name, scene_ir::TextureSwizzle{ .texture_idx = u32(texture->textureIndex) }); },
             [&](std::string_view name, nova::Span<f32> values) {
                 switch (values.size()) {
-                    break;case 1: outMaterial.properties.emplace_back(name, values[0]);
-                    break;case 2: outMaterial.properties.emplace_back(name, Vec2(values[0], values[1]));
-                    break;case 3: outMaterial.properties.emplace_back(name, Vec3(values[0], values[1], values[2]));
-                    break;case 4: outMaterial.properties.emplace_back(name, Vec4(values[0], values[1], values[2], values[3]));
+                    break;case 1: out_material.properties.emplace_back(name, values[0]);
+                    break;case 2: out_material.properties.emplace_back(name, Vec2(values[0], values[1]));
+                    break;case 3: out_material.properties.emplace_back(name, Vec3(values[0], values[1], values[2]));
+                    break;case 4: out_material.properties.emplace_back(name, Vec4(values[0], values[1], values[2], values[3]));
                     break;default: NOVA_THROW("Invalid number of values: {}", values.size());
                 }
             },
-            [&](std::string_view name, f32  scalar) { outMaterial.properties.emplace_back(name, scalar); },
-            [&](std::string_view name, i32  scalar) { outMaterial.properties.emplace_back(name, scalar); },
-            [&](std::string_view name, bool scalar) { outMaterial.properties.emplace_back(name, scalar); },
+            [&](std::string_view name, f32  scalar) { out_material.properties.emplace_back(name, scalar); },
+            [&](std::string_view name, i32  scalar) { out_material.properties.emplace_back(name, scalar); },
+            [&](std::string_view name, bool scalar) { out_material.properties.emplace_back(name, scalar); },
             [&](std::string_view name, fastgltf::Optional<f32> scalar) {
-                if (scalar) outMaterial.properties.emplace_back(name, scalar.value()); },
+                if (scalar) out_material.properties.emplace_back(name, scalar.value()); },
             [&](std::string_view name, fastgltf::Optional<i32> scalar) {
-                if (scalar) outMaterial.properties.emplace_back(name, scalar.value()); },
+                if (scalar) out_material.properties.emplace_back(name, scalar.value()); },
             [&](std::string_view name, fastgltf::Optional<bool> scalar) {
-                if (scalar) outMaterial.properties.emplace_back(name, scalar.value()); },
+                if (scalar) out_material.properties.emplace_back(name, scalar.value()); },
         };
 
-        addProperty(scene_ir::property::BaseColor, inMaterial.pbrData.baseColorTexture);
-        addProperty(scene_ir::property::BaseColor, inMaterial.pbrData.baseColorFactor);
+        AddProperty(scene_ir::property::BaseColor, in_material.pbrData.baseColorTexture);
+        AddProperty(scene_ir::property::BaseColor, in_material.pbrData.baseColorFactor);
 
-        addProperty(scene_ir::property::Normal, inMaterial.normalTexture);
+        AddProperty(scene_ir::property::Normal, in_material.normalTexture);
 
-        addProperty(scene_ir::property::Emissive, inMaterial.emissiveTexture);
-        addProperty(scene_ir::property::Emissive, inMaterial.emissiveFactor);
-        addProperty(scene_ir::property::Emissive, inMaterial.emissiveStrength);
+        AddProperty(scene_ir::property::Emissive, in_material.emissiveTexture);
+        AddProperty(scene_ir::property::Emissive, in_material.emissiveFactor);
+        AddProperty(scene_ir::property::Emissive, in_material.emissiveStrength);
 
-        addProperty(scene_ir::property::Metallic , inMaterial.pbrData.metallicRoughnessTexture);
-        addProperty(scene_ir::property::Metallic , inMaterial.pbrData.metallicFactor);
-        addProperty(scene_ir::property::Roughness, inMaterial.pbrData.metallicRoughnessTexture);
-        addProperty(scene_ir::property::Roughness, inMaterial.pbrData.roughnessFactor);
+        AddProperty(scene_ir::property::Metallic , in_material.pbrData.metallicRoughnessTexture);
+        AddProperty(scene_ir::property::Metallic , in_material.pbrData.metallicFactor);
+        AddProperty(scene_ir::property::Roughness, in_material.pbrData.metallicRoughnessTexture);
+        AddProperty(scene_ir::property::Roughness, in_material.pbrData.roughnessFactor);
 
-        addProperty(scene_ir::property::AlphaCutoff, inMaterial.alphaCutoff);
-        addProperty(scene_ir::property::AlphaMask  , inMaterial.alphaMode == fastgltf::AlphaMode::Mask);
+        AddProperty(scene_ir::property::AlphaCutoff, in_material.alphaCutoff);
+        AddProperty(scene_ir::property::AlphaMask  , in_material.alphaMode == fastgltf::AlphaMode::Mask);
     }
 
-    void GltfImporter::ProcessMesh(u32 gltfMeshIdx, u32 primitiveIndex)
+    void GltfImporter::ProcessMesh(u32 gltf_mesh_idx, u32 primitive_index)
     {
-        auto& primitive = asset->meshes[gltfMeshIdx].primitives[primitiveIndex];
+        auto& primitive = asset->meshes[gltf_mesh_idx].primitives[primitive_index];
 
-        if (asset->meshes[gltfMeshIdx].name.contains("decal")) {
+        if (asset->meshes[gltf_mesh_idx].name.contains("decal")) {
             return;
         }
 
@@ -207,37 +207,37 @@ namespace axiom
                 || primitive.findAttribute("POSITION") == primitive.attributes.end())
             return;
 
-        auto& outMesh = scene.meshes.emplace_back();
-        outMesh.materialIdx = u32(primitive.materialIndex.value_or(scene_ir::InvalidIndex));
+        auto& out_mesh = scene.meshes.emplace_back();
+        out_mesh.material_idx = u32(primitive.materialIndex.value_or(scene_ir::InvalidIndex));
 
         // Indices
         auto& indices = asset->accessors[primitive.indicesAccessor.value()];
-        outMesh.indices.resize(indices.count);
-        fastgltf::copyFromAccessor<u32>(*asset, indices, outMesh.indices.data());
+        out_mesh.indices.resize(indices.count);
+        fastgltf::copyFromAccessor<u32>(*asset, indices, out_mesh.indices.data());
 
         // Positions
         auto& positions = asset->accessors[primitive.findAttribute("POSITION")->second];
-        outMesh.positions.resize(positions.count);
-        fastgltf::copyFromAccessor<Vec3>(*asset, positions, outMesh.positions.data());
+        out_mesh.positions.resize(positions.count);
+        fastgltf::copyFromAccessor<Vec3>(*asset, positions, out_mesh.positions.data());
 
         // Normals
         if (auto normals = primitive.findAttribute("NORMAL"); normals != primitive.attributes.end()) {
             auto& accessor = asset->accessors[normals->second];
-            outMesh.normals.resize(accessor.count);
-            fastgltf::copyFromAccessor<Vec3>(*asset, accessor, outMesh.normals.data());
+            out_mesh.normals.resize(accessor.count);
+            fastgltf::copyFromAccessor<Vec3>(*asset, accessor, out_mesh.normals.data());
         }
 
         // TexCoords (0)
-        if (auto texCoords = primitive.findAttribute("TEXCOORD_0"); texCoords != primitive.attributes.end()) {
-            auto& accessor = asset->accessors[texCoords->second];
-            outMesh.texCoords.resize(accessor.count);
-            fastgltf::copyFromAccessor<Vec2>(*asset, accessor, outMesh.texCoords.data());
+        if (auto tex_coords = primitive.findAttribute("TEXCOORD_0"); tex_coords != primitive.attributes.end()) {
+            auto& accessor = asset->accessors[tex_coords->second];
+            out_mesh.tex_coords.resize(accessor.count);
+            fastgltf::copyFromAccessor<Vec2>(*asset, accessor, out_mesh.tex_coords.data());
         }
     }
 
-    void GltfImporter::ProcessNode(usz nodeIdx, Mat4 parentTransform)
+    void GltfImporter::ProcessNode(usz node_idx, Mat4 parent_transform)
     {
-        auto& node = asset->nodes[nodeIdx];
+        auto& node = asset->nodes[node_idx];
 
         Mat4 transform = Mat4(1.f);
         if (auto trs = std::get_if<fastgltf::Node::TRS>(&node.transform)) {
@@ -251,20 +251,20 @@ namespace axiom
             transform = std::bit_cast<Mat4>(*m);
         }
 
-        transform = parentTransform * transform;
+        transform = parent_transform * transform;
 
         if (node.meshIndex.has_value()) {
-            auto[meshIdx, meshCount] = gltfMeshOffsets[node.meshIndex.value()];
-            for (u32 i = 0; i < meshCount; ++i) {
+            auto[mesh_idx, mesh_count] = gltf_mesh_offsets[node.meshIndex.value()];
+            for (u32 i = 0; i < mesh_count; ++i) {
                 scene.instances.emplace_back(scene_ir::Instance {
-                    .meshIdx = meshIdx + i,
+                    .mesh_idx = mesh_idx + i,
                     .transform = transform,
                 });
             }
         }
 
-        for (auto childIdx : node.children) {
-            ProcessNode(childIdx, transform);
+        for (auto child_idx : node.children) {
+            ProcessNode(child_idx, transform);
         }
     }
 }

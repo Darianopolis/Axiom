@@ -23,23 +23,14 @@ namespace axiom
         Assimp::Importer   assimp;
         const aiScene*      asset = nullptr;
 
-        nova::HashMap<std::string, AssimpIndex> textureIndices;
+        nova::HashMap<std::string, AssimpIndex> texture_indices;
 
         void Reset();
 
-        void ProcessTexture(u32 textureIndex);
-        void ProcessMaterial(u32 materialIndex);
-        void ProcessMesh(u32 meshIndex);
-        void ProcessNode(aiNode* node, Mat4 parentTransform);
-
-        // void ProcessTextures();
-        // void ProcessTexture(UVTexture* outTexture, const std::filesystem::path& texture);
-
-        // void ProcessMaterials();
-        // void ProcessMaterial(u32 index, aiMaterial* material);
-
-        // void ProcessScene();
-        // void ProcessNode(aiNode* node, Mat4 parentTransform);
+        void ProcessTexture(u32 texture_index);
+        void ProcessMaterial(u32 material_index);
+        void ProcessMesh(u32 mesh_index);
+        void ProcessNode(aiNode* node, Mat4 parent_transform);
 
         scene_ir::Scene Import(const std::filesystem::path& path);
     };

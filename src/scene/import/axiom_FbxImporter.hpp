@@ -39,23 +39,23 @@ namespace axiom
 
         scene_ir::Scene scene;
 
-        std::vector<std::pair<u32, u32>> fbxMeshOffsets;
+        std::vector<std::pair<u32, u32>> fbx_mesh_offsets;
 
-        nova::HashMap<void*, u32>  textureIndices;
-        nova::HashMap<void*, u32> materialIndices;
+        nova::HashMap<void*, u32>  texture_indices;
+        nova::HashMap<void*, u32> material_indices;
 
-        std::vector<u32>                 triIndices;
-        nova::HashMap<FbxVertex, FbxIndex> uniqueVertices;
-        std::vector<FbxVertex>        vertexIndices;
+        std::vector<u32>                       tri_indices;
+        nova::HashMap<FbxVertex, FbxIndex> unique_vertices;
+        std::vector<FbxVertex>              vertex_indices;
 
         ~FbxImporter();
 
         void Reset();
         scene_ir::Scene Import(const std::filesystem::path& path);
 
-        void ProcessTexture(u32 texIdx);
-        void ProcessMaterial(u32 matIdx);
-        void ProcessMesh(u32 fbxMeshIdx, u32 primIdx);
-        void ProcessNode(ufbx_node* node, Mat4 parentTransform);
+        void ProcessTexture(u32 tex_idx);
+        void ProcessMaterial(u32 mat_idx);
+        void ProcessMesh(u32 fbx_mesh_idx, u32 prim_idx);
+        void ProcessNode(ufbx_node* node, Mat4 parent_transform);
     };
 }

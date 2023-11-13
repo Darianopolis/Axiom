@@ -79,25 +79,3 @@ struct scene_t {
     span_t<u32_t>                mesh_instances;
     span_t<node_t>               nodes;
 };
-
-void foo()
-{
-    constexpr u64_t numVertices = 2088740;
-    constexpr u64_t numIndices = 11216376;
-    constexpr u64_t numMeshes = 103;
-    constexpr u64_t textureDataSize = 7717519388 / 4;
-    constexpr u64_t numTextures = 122;
-    constexpr u64_t numMaterials = 43;
-    constexpr u64_t numInstances = 103;
-    constexpr u64_t numNodes = 173;
-
-    constexpr u64_t size = 0ull
-        + numVertices * (sizeof(vec3_t) + sizeof(shading_attributes_t))
-        + numIndices * sizeof(u32_t)
-        + numMeshes * sizeof(mesh_t)
-        + textureDataSize
-        + numTextures * sizeof(texture_t)
-        + numMaterials * sizeof(material_t)
-        + numInstances * sizeof(u32_t)
-        + numNodes * sizeof(node_t);
-}
