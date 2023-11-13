@@ -2,6 +2,8 @@
 
 #include <scene/axiom_Scene.hpp>
 
+#include <nova/core/nova_Containers.hpp>
+
 // TODO:
 #include <ufbx.h>
 
@@ -39,11 +41,11 @@ namespace axiom
 
         std::vector<std::pair<u32, u32>> fbxMeshOffsets;
 
-        HashMap<void*, u32>  textureIndices;
-        HashMap<void*, u32> materialIndices;
+        nova::HashMap<void*, u32>  textureIndices;
+        nova::HashMap<void*, u32> materialIndices;
 
         std::vector<u32>                 triIndices;
-        HashMap<FbxVertex, FbxIndex> uniqueVertices;
+        nova::HashMap<FbxVertex, FbxIndex> uniqueVertices;
         std::vector<FbxVertex>        vertexIndices;
 
         ~FbxImporter();

@@ -202,8 +202,8 @@ namespace axiom
 
             GPU_Geometry gpu;
             gpu.indices_va        = 0;
-            gpu.positions_va      = nova::AlignUpPower2(gpu.indices_va        + index_size,   4);
-            gpu.tangent_spaces_va = nova::AlignUpPower2(gpu.positions_va      + pos_size,     4);
+            gpu.positions_va      = nova::AlignUpPower2(gpu.indices_va        + index_size,         4);
+            gpu.tangent_spaces_va = nova::AlignUpPower2(gpu.positions_va      + pos_size,           4);
             gpu.tex_coords_va     = nova::AlignUpPower2(gpu.tangent_spaces_va + tangent_space_size, 4);
 
             auto buffer = nova::Buffer::Create(engine->context,
@@ -211,11 +211,11 @@ namespace axiom
                 nova::BufferUsage::Index       | nova::BufferUsage::Storage,
                 nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
-            buffer.Set<u32>(       Span(geometry.indices.begin,        geometry.indices.count),        0, gpu.indices_va);
-            buffer.Set<Vec3>(      Span(geometry.positions.begin,      geometry.positions.count),      0, gpu.positions_va);
-            buffer.Set<imp::Basis>(Span(geometry.tangent_spaces.begin, geometry.tangent_spaces.count), 0, gpu.tangent_spaces_va);
+            buffer.Set<u32>(       nova::Span(geometry.indices.begin,        geometry.indices.count),        0, gpu.indices_va);
+            buffer.Set<Vec3>(      nova::Span(geometry.positions.begin,      geometry.positions.count),      0, gpu.positions_va);
+            buffer.Set<imp::Basis>(nova::Span(geometry.tangent_spaces.begin, geometry.tangent_spaces.count), 0, gpu.tangent_spaces_va);
             buffer.Set<imp::Vec2<imp::Float16>>(
-                                   Span(geometry.tex_coords.begin,     geometry.tex_coords.count),     0, gpu.tex_coords_va);
+                                   nova::Span(geometry.tex_coords.begin,     geometry.tex_coords.count),     0, gpu.tex_coords_va);
 
             gpu.indices_va        += buffer.GetAddress();
             gpu.positions_va      += buffer.GetAddress();
@@ -229,50 +229,50 @@ namespace axiom
             geometry_buffers[i] = buffer;
         }
 
-        geometry_ranges.Set<imp::GeometryRange>(Span(scene->geometry_ranges.begin, scene->geometry_ranges.count));
+        geometry_ranges.Set<imp::GeometryRange>(nova::Span(scene->geometry_ranges.begin, scene->geometry_ranges.count));
 
         // Textures
 
-        for (u32 i = 0; i < scene->textures.count; ++i) {
-            auto& texture = scene->textures[i];
+        // for (u32 i = 0; i < scene->textures.count; ++i) {
+        //     auto& texture = scene->textures[i];
 
-            nova::Format nova_format;
-            switch (texture.format) {
-                    using enum imp::TextureFormat;
-                break;case RGBA8_UNORM: nova_format = nova::Format::RGBA8_UNorm;
-                break;case RGBA8_SRGB:  nova_format = nova::Format::RGBA8_SRGB;
-                break;case RG8_UNORM:   nova_format = nova::Format::RG8_UNorm;
-                break;case R8_UNORM:    nova_format = nova::Format::R8_UNorm;
-                break;default: std::unreachable();
-            }
+        //     nova::Format nova_format;
+        //     switch (texture.format) {
+        //             using enum imp::TextureFormat;
+        //         break;case RGBA8_UNORM: nova_format = nova::Format::RGBA8_UNorm;
+        //         break;case RGBA8_SRGB:  nova_format = nova::Format::RGBA8_SRGB;
+        //         break;case RG8_UNORM:   nova_format = nova::Format::RG8_UNorm;
+        //         break;case R8_UNORM:    nova_format = nova::Format::R8_UNorm;
+        //         break;default: std::unreachable();
+        //     }
 
-            textures[i] = nova::Texture::Create(engine->context,
-                Vec3U(texture.size, 0),
-                nova::TextureUsage::Sampled,
-                nova_format,
-                {});
+        //     textures[i] = nova::Texture::Create(engine->context,
+        //         Vec3U(texture.size, 0),
+        //         nova::TextureUsage::Sampled,
+        //         nova_format,
+        //         {});
 
-            textures[i].Set({}, Vec3(texture.size, 1), texture.data.begin);
-        }
+        //     textures[i].Set({}, Vec3(texture.size, 1), texture.data.begin);
+        // }
 
         // Materials
 
-        for (u32 i = 0; i < scene->materials.count; ++i) {
-            auto material = scene->materials[i];
+        // for (u32 i = 0; i < scene->materials.count; ++i) {
+        //     auto material = scene->materials[i];
 
-            { if (auto& d = material.albedo_alpha_texture; d != -1) d = textures[d].GetDescriptor(); }
-            { if (auto& d = material.metalness_texture;    d != -1) d = textures[d].GetDescriptor(); }
-            { if (auto& d = material.roughness_texture;    d != -1) d = textures[d].GetDescriptor(); }
-            { if (auto& d = material.normal_texture;       d != -1) d = textures[d].GetDescriptor(); }
-            { if (auto& d = material.emission_texture;     d != -1) d = textures[d].GetDescriptor(); }
-            { if (auto& d = material.transmission_texture; d != -1) d = textures[d].GetDescriptor(); }
+        //     { if (auto& d = material.albedo_alpha_texture; d != -1) d = textures[d].GetDescriptor(); }
+        //     { if (auto& d = material.metalness_texture;    d != -1) d = textures[d].GetDescriptor(); }
+        //     { if (auto& d = material.roughness_texture;    d != -1) d = textures[d].GetDescriptor(); }
+        //     { if (auto& d = material.normal_texture;       d != -1) d = textures[d].GetDescriptor(); }
+        //     { if (auto& d = material.emission_texture;     d != -1) d = textures[d].GetDescriptor(); }
+        //     { if (auto& d = material.transmission_texture; d != -1) d = textures[d].GetDescriptor(); }
 
-            materials.Set<imp::Material>({ material }, i);
-        }
+        //     materials.Set<imp::Material>({ material }, i);
+        // }
 
         // Meshes
 
-        meshes.Set<imp::Mesh>(Span(scene->meshes.begin, scene->meshes.count));
+        meshes.Set<imp::Mesh>(nova::Span(scene->meshes.begin, scene->meshes.count));
 
         // // Transforms
 

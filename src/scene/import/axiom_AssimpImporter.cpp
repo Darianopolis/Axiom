@@ -1,5 +1,7 @@
 #include "axiom_AssimpImporter.hpp"
 
+#include <nova/core/nova_Containers.hpp>
+
 namespace axiom
 {
     void AssimpImporter::Reset()
@@ -100,7 +102,7 @@ namespace axiom
         auto& inMaterial = asset->mMaterials[materialIndex];
         auto& outMaterial = scene.materials[materialIndex];
 
-        auto findTexture = [&](Span<aiTextureType> texTypes) -> std::optional<u32> {
+        auto findTexture = [&](nova::Span<aiTextureType> texTypes) -> std::optional<u32> {
             for (auto type : texTypes) {
                 if (inMaterial->GetTextureCount(type) > 0) {
                     aiString str;

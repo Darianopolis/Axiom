@@ -2,16 +2,15 @@
 
 #include <engine/Renderer.hpp>
 
-// #include <engine/SceneCompiler.hpp>
-
-// #include <scene/axiom_Scene.hpp>
-// #include <scene/import/axiom_GltfImporter.hpp>
-// #include <scene/import/axiom_FbxImporter.hpp>
-// #include <scene/import/axiom_AssimpImporter.hpp>
+#include <nova/core/nova_Guards.hpp>
+#include <nova/core/nova_ToString.hpp>
 
 #include <imp/imp_Importer.hpp>
 #include <imp/imp_Scene.hpp>
 
+#define GLFW_EXPOSE_NATIVE_WIN32
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
 #include <glfw/glfw3.h>
 #include <GLFW/glfw3native.h>
 
@@ -101,7 +100,7 @@ int main(int argc, char* argv[])
     try {
         axiom::Engine engine;
 
-        NOVA_CLEANUP(&) { engine.Shutdown(); };
+        NOVA_DEFER(&) { engine.Shutdown(); };
         engine.Init();
 
         auto step = new DemoStep;

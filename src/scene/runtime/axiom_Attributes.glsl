@@ -25,11 +25,12 @@ vec2 axiom_DecodeDiamond(float p)
     return normalize(v);
 }
 
-vec3 axiom_DecodeTangent(vec3 normal, float diamondTangent)
+vec3 axiom_DecodeTangent(vec3 normal, float diamondTangent, uint choice)
 {
     // As in the encode step, find our canonical tangent basis span(t1, t2)
     vec3 t1;
-    if (abs(normal.y) > abs(normal.z)) {
+    // if (abs(normal.y) > abs(normal.z)) {
+    if (choice != 0) {
         t1 = vec3(normal.y, -normal.x, 0.f);
     } else {
         t1 = vec3(normal.z, 0.f, -normal.x);
@@ -53,13 +54,14 @@ void axiom_UnpackTangentSpace(axiom_TangentSpace ts, out vec3 normal, out vec3 t
     normal = _normal;
 
     tangent = axiom_DecodeTangent(_normal,
-        float(bitfieldExtract(ts.packed, 21, 10)) / 1023.0);
+        float(bitfieldExtract(ts.packed, 21, 10)) / 1023.0,
+        bitfieldExtract(ts.packed, 31, 1));
 }
 
-float axiom_UnpackBitangentSign(axiom_TangentSpace ts)
-{
-    return float(bitfieldExtract(ts.packed, 31, 1)) * 2.0 - 1.0;
-}
+// float axiom_UnpackBitangentSign(axiom_TangentSpace ts)
+// {
+//     return float(bitfieldExtract(ts.packed, 31, 1)) * 2.0 - 1.0;
+// }
 
 vec2 axiom_UnpackTexCoords(axiom_TexCoords uv)
 {

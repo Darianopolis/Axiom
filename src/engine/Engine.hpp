@@ -28,9 +28,9 @@ namespace axiom
         nova::CommandList     cmd;
         nova::Sampler     sampler;
 
-        struct GLFWwindow* window;
-        nova::Swapchain swapchain;
-        nova::ImGuiLayer*   imgui;
+        struct GLFWwindow*      window;
+        nova::Swapchain      swapchain;
+        nova::imgui::ImGuiLayer* imgui;
 
         std::vector<Step*>  steps;
 

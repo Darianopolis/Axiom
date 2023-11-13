@@ -140,3 +140,125 @@ float LuminanceRGB(vec3 rgb)
     // return 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
     return 0.3 * rgb.r + 0.6 * rgb.g + 0.1 * rgb.b;
 }
+
+
+uvec2 rnd;
+
+float RandomUNorm()
+{
+    const uint64_t A = 4294883355;
+    uint x = rnd.x, c = rnd.y;
+    uint res = x ^ c;
+    uint64_t next = x * A + c;
+    rnd.x = uint(next & 4294967295);
+    rnd.y = uint(next >> 32);
+
+    return 2.3283064365387e-10 * res;
+}
+
+bool IsInfZeroOrNan(vec3 V)
+{
+    float t = V.x + V.y + V.z;
+    return t == 0 || isnan(t) || isinf(t);
+}
+
+vec3 GetTangent(vec3 N)
+{
+    float s = sign(N.z);
+    float a = -1.0 / (s + N.z);
+    float b = N.x * N.y * a;
+
+    return vec3(1 + s * sqr(N.x) * a, s * b, -s * N.x);
+}
+
+vec3 RandomOnSphere()
+{
+    float z = 1 - 2 * RandomUNorm();
+    float r = sqrt(max(0, 1 - z * z));
+    float phi = 2 * PI * RandomUNorm();
+    return vec3(r * cos(phi), r * sin(phi), z);
+}
+
+mat3 MakeTBN(vec3 N)
+{
+    float s = sign(N.z);
+    if (s == 0) s = 1;
+    float a = -1.0 / (s + N.z);
+    float b = N.x * N.y * a;
+
+    vec3 T = vec3(1 + s * sqr(N.x) * a, s * b, -s * N.x);
+    vec3 B = vec3(b, s + sqr(N.y) * a, -N.y);
+
+    return mat3(T, B, N);
+}
+
+vec3 ChangeBasis(vec3 v, vec3 N)
+{
+    float s = sign(N.z);
+    float a = -1.0 / (s + N.z);
+    float b = N.x * N.y * a;
+
+    vec3 T = vec3(1 + s * sqr(N.x) * a, s * b, -s * N.x);
+    vec3 B = vec3(b, s + sqr(N.y) * a, -N.y);
+
+    return normalize(
+          (v.x * T)
+        + (v.y * B)
+        + (v.z * N));
+}
+
+vec3 RandomOnCone(vec3 dir, float cosThetaMax)
+{
+    float u0 = RandomUNorm();
+    float cosTheta = (1 - u0) + u0 * cosThetaMax;
+    float sinTheta = sqrt(1 - cosTheta * cosTheta);
+    float phi = 2 * PI * RandomUNorm();
+
+    vec3 v1 = vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+    return ChangeBasis(v1, dir);
+}
+
+vec2 ConcentricSampleDisk()
+{
+    vec2 uOffset = 2 * vec2(RandomUNorm(), RandomUNorm()) - vec2(1, 1);
+
+    if (uOffset.x == 0 && uOffset.y == 0)
+        return vec2(0, 0);
+
+    float theta, r;
+    if (abs(uOffset.x) > abs(uOffset.y)) {
+        r = uOffset.x;
+        theta = PI/4 * (uOffset.y / uOffset.x);
+    } else {
+        r = uOffset.y;
+        theta = PI/2 - (PI/4 * uOffset.x / uOffset.y);
+    }
+
+    return r * vec2(cos(theta), sin(theta));
+}
+
+vec3 CosineSampleHemisphere()
+{
+    vec2 d = ConcentricSampleDisk();
+    float z = sqrt(max(0, 1 - d.x * d.x - d.y * d.y));
+    return vec3(d.x, d.y, z);
+}
+
+float CosineSampleHemispherePDF(float cosTheta)
+{
+    return cosTheta / PI;
+}
+
+vec3 VCosineSampleHemisphere(float alpha)
+{
+    float cosTheta = pow(RandomUNorm(), 1 / (alpha + 1));
+    float sinTheta = sqrt(1 - cosTheta * cosTheta);
+    float phi = 2 * PI * RandomUNorm();
+    return vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+}
+
+float VCosineSampleHemispherePDF(vec3 v, float alpha)
+{
+    float cosTheta = v.z;
+    return (cosTheta + alpha) * pow(cosTheta, alpha) / PI;
+}

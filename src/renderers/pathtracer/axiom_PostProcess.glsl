@@ -27,6 +27,8 @@ vec3 SaturateVec3(vec3 v)
     return vec3(clamp(v.x, 0, 1), clamp(v.y, 0, 1), clamp(v.z, 0, 1));
 }
 
+// https://github.com/dmnsgn/glsl-tone-map
+
 vec3 filmic(vec3 x) {
   vec3 X = max(vec3(0.0), x - 0.004);
   vec3 result = (X * (6.2 * X + 0.5)) / (X * (6.2 * X + 1.7) + 0.06);
@@ -113,6 +115,8 @@ vec3 uncharted2(vec3 color) {
 vec3 unreal(vec3 x) {
   return x / (x + 0.155) * 1.019;
 }
+
+// TODO: Attribtion you fool!
 
 const float saturation_compression = 0.1f;
 const float saturation_boost = 0.2f;

@@ -7,13 +7,15 @@
 #include <scene/import/axiom_AssimpImporter.hpp>
 
 #include <nova/rhi/nova_RHI.hpp>
-#include <nova/rhi/vulkan/nova_VulkanRHI.hpp>
 
+#include <nova/core/nova_Timer.hpp>
+#include <nova/core/nova_Guards.hpp>
+#include <nova/core/nova_ToString.hpp>
 #include <nova/ui/nova_ImGui.hpp>
 
-#ifndef GLFW_EXPOSE_NATIVE_WIN32
 #define GLFW_EXPOSE_NATIVE_WIN32
-#endif
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 
@@ -88,35 +90,35 @@ int main(int argc, char* argv[])
 
     axiom::CompiledScene compiledScene;
 
-    // for (auto& path : paths) {
-    //     auto ext = path.extension().string();
-    //     std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return char(std::tolower(c)); });
+    for (auto& path : paths) {
+        auto ext = path.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return char(std::tolower(c)); });
 
-    //     axiom::scene_ir::Scene scene;
+        axiom::scene_ir::Scene scene;
 
-    //     if (useAssimp) {
-    //         scene = assimpImporter.Import(path);
-    //     } else if (ext == ".gltf" || ext == ".glb") {
-    //         scene = gltfImporter.Import(path);
-    //     } else if (ext == ".fbx") {
-    //         scene = fbxImporter.Import(path);
-    //     } else {
-    //         scene = assimpImporter.Import(path);
-    //     }
+        if (useAssimp) {
+            scene = assimpImporter.Import(path);
+        } else if (ext == ".gltf" || ext == ".glb") {
+            scene = gltfImporter.Import(path);
+        } else if (ext == ".fbx") {
+            scene = fbxImporter.Import(path);
+        } else {
+            scene = assimpImporter.Import(path);
+        }
 
-    //     scene.Debug();
-    //     compiler.Compile(scene, compiledScene);
-    // }
-
-    {
-        auto& path = paths[0];
-        imp::Importer importer;
-        importer.SetBaseDir(path.parent_path());
-        importer.LoadFile(path);
-        importer.ReportStatistics();
-        auto scene = importer.GenerateScene();
-        compiledScene.Compile(scene);
+        // scene.Debug();
+        compiler.Compile(scene, compiledScene);
     }
+
+    // {
+    //     auto& path = paths[0];
+    //     imp::Importer importer;
+    //     importer.SetBaseDir(path.parent_path());
+    //     importer.LoadFile(path);
+    //     importer.ReportStatistics();
+    //     auto scene = importer.GenerateScene();
+    //     compiledScene.Compile(scene);
+    // }
 
 // -----------------------------------------------------------------------------
     NOVA_TIMEIT("load-scene");
@@ -125,14 +127,15 @@ int main(int argc, char* argv[])
 
     auto context = nova::Context::Create({
         .debug = false,
-        .rayTracing = true,
+        .ray_tracing = true,
+        .compatibility = false,
     });
     auto queue = context.GetQueue(nova::QueueFlags::Graphics, 0);
     auto fence = nova::Fence::Create(context);
     auto cmdPool = nova::CommandPool::Create(context, queue);
     auto sampler = nova::Sampler::Create(context, nova::Filter::Linear,
         nova::AddressMode::Repeat, nova::BorderColor::TransparentBlack, 0.f);
-    NOVA_CLEANUP(&) {
+    NOVA_DEFER(&) {
         fence.Wait();
         cmdPool.Destroy();
         sampler.Destroy();
@@ -159,7 +162,7 @@ int main(int argc, char* argv[])
 // -----------------------------------------------------------------------------
 
     glfwInit();
-    NOVA_CLEANUP(&) { glfwTerminate(); };
+    NOVA_DEFER(&) { glfwTerminate(); };
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     auto window = glfwCreateWindow(1920, 1080, "Axiom", nullptr, nullptr);
@@ -170,7 +173,7 @@ int main(int argc, char* argv[])
         | nova::TextureUsage::ColorAttach
         | nova::TextureUsage::TransferDst,
         nova::PresentMode::Mailbox);
-    NOVA_CLEANUP(&) {
+    NOVA_DEFER(&) {
         fence.Wait();
         swapchain.Destroy();
     };
@@ -183,7 +186,14 @@ int main(int argc, char* argv[])
         }
     });
 
-    auto imgui = nova::ImGuiLayer({
+    static bool showSettings = true;
+    glfwSetKeyCallback(window, [](auto, int key, int scancode, int action, int mods) {
+        if (key == GLFW_KEY_F1 && action == GLFW_PRESS) {
+            showSettings = !showSettings;
+        }
+    });
+
+    auto imgui = nova::imgui::ImGuiLayer({
         .window = window,
         .context = context,
         .sampler = sampler,
@@ -230,6 +240,7 @@ int main(int argc, char* argv[])
     POINT savedPos{ 0, 0 };
     bool lastMouseDrag = false;
     f32 mouseSpeed = 0.0025f;
+
 
     /*
 
@@ -278,7 +289,7 @@ int main(int argc, char* argv[])
 
     */
 
-    NOVA_CLEANUP(&) { fence.Wait(); };
+    NOVA_DEFER(&) { fence.Wait(); };
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         imgui.BeginFrame();
@@ -365,9 +376,9 @@ int main(int argc, char* argv[])
 
         // UI
 
-        {
-            ImGui::Begin("Settings");
-            NOVA_CLEANUP(&) { ImGui::End(); };
+        if (showSettings) {
+            ImGui::Begin("Settings (F1 to show/hide)");
+            NOVA_DEFER(&) { ImGui::End(); };
 
             ImGui::Text("Allocations: Mem = %s, Active = %i (%i / s)", nova::ByteSizeToString(allocatedMem).c_str(), allocationCountActive, allocationCountRate);
             ImGui::Text("Frametime: %s (%.2f fps)", nova::DurationToString(1s / fps).c_str(), fps);

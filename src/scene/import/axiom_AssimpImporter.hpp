@@ -2,6 +2,8 @@
 
 #include <scene/axiom_Scene.hpp>
 
+#include <nova/core/nova_Containers.hpp>
+
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 
@@ -21,7 +23,7 @@ namespace axiom
         Assimp::Importer   assimp;
         const aiScene*      asset = nullptr;
 
-        HashMap<std::string, AssimpIndex> textureIndices;
+        nova::HashMap<std::string, AssimpIndex> textureIndices;
 
         void Reset();
 

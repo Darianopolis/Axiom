@@ -28,7 +28,7 @@ namespace axiom
     struct Renderer
     {
         static constexpr u32 MaxGeometries     = 1ull << 20;
-        static constexpr u32 MaxGeometryRanges = 1ull << 20;
+        static constexpr u32 MaxGeometryRanges = 1ull << 21;
         static constexpr u32 MaxTextures       = 1ull << 20;
         static constexpr u32 MaxMaterials      = 1ull << 20;
         static constexpr u32 MaxTransformNodes = 1ull << 21;

@@ -1,9 +1,9 @@
 #include "axiom_Renderer.hpp"
 
-#include <nova/rhi/vulkan/glsl/nova_VulkanGlsl.hpp>
-#include <nova/core/nova_SubAllocation.hpp>
+#include <nova/core/nova_ToString.hpp>
+#include <nova/core/nova_Guards.hpp>
 
-#include <nova/rhi/vulkan/nova_VulkanRHI.hpp>
+#include <nova/rhi/vulkan/glsl/nova_VulkanGlsl.hpp>
 
 #include <rdo_bc_encoder.h>
 
@@ -296,7 +296,7 @@ namespace axiom
 
         auto builder = nova::AccelerationStructureBuilder::Create(context);
         auto scratch = nova::Buffer::Create(context, 0, nova::BufferUsage::Storage, nova::BufferFlags::DeviceLocal);
-        NOVA_CLEANUP(&) {
+        NOVA_DEFER(&) {
             builder.Destroy();
             scratch.Destroy();
         };
@@ -309,7 +309,7 @@ namespace axiom
                 std::max(MinAccelInputBufferSize, maxPerBlasVertexCount * sizeof(Vec3)),
                 nova::BufferUsage::Storage | nova::BufferUsage::AccelBuild,
                 nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
-            NOVA_CLEANUP(&) { posAttribBuffer.Destroy(); };
+            NOVA_DEFER(&) { posAttribBuffer.Destroy(); };
 
             // Find maximal scratch and build BLAS sizes for all meshes
 
@@ -342,7 +342,7 @@ namespace axiom
             scratch.Resize(scratchSize);
             auto buildBlas = nova::AccelerationStructure::Create(context, buildBlasSize,
                 nova::AccelerationStructureType::BottomLevel);
-            NOVA_CLEANUP(&) { buildBlas.Destroy(); };
+            NOVA_DEFER(&) { buildBlas.Destroy(); };
 
             for (u32 i = 0; i < scene->meshes.size(); ++i) {
                 auto& mesh = scene->meshes[i];
@@ -409,7 +409,7 @@ namespace axiom
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
         tlasInstanceBuffer = nova::Buffer::Create(context,
-            scene->instances.size() * sizeof(VkAccelerationStructureInstanceKHR),
+            scene->instances.size() * builder.GetInstanceSize(),
             nova::BufferUsage::AccelBuild,
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
@@ -586,6 +586,11 @@ namespace axiom
             .exposure = exposure,
             .mode = u32(mode),
         });
+
+        Quat q = Quat(Vec3(0.f));
+        Quat q2 = glm::angleAxis(0.f, Vec3(1.f));
+
+        Vec3 v = q * Vec3(1.f);
 
         cmd.BindShaders({ postProcessShader });
         cmd.Barrier(nova::PipelineStage::RayTracing, nova::PipelineStage::Compute);

@@ -25,106 +25,6 @@ bool IsUnobstructed(vec3 origin, vec3 dir, float tMax)
     return !hitObjectIsHitNV(hit);
 }
 
-uvec2 rnd;
-
-float RandomUNorm()
-{
-    const uint64_t A = 4294883355;
-    uint x = rnd.x, c = rnd.y;
-    uint res = x ^ c;
-    uint64_t next = x * A + c;
-    rnd.x = uint(next & 4294967295);
-    rnd.y = uint(next >> 32);
-
-    return 2.3283064365387e-10 * res;
-}
-
-bool IsInfZeroOrNan(vec3 V)
-{
-    float t = V.x + V.y + V.z;
-    return t == 0 || isnan(t) || isinf(t);
-}
-
-vec3 GetTangent(vec3 N)
-{
-    float s = sign(N.z);
-    float a = -1.0 / (s + N.z);
-    float b = N.x * N.y * a;
-
-    return vec3(1 + s * sqr(N.x) * a, s * b, -s * N.x);
-}
-
-vec3 ChangeBasis(vec3 v, vec3 N)
-{
-    float s = sign(N.z);
-    float a = -1.0 / (s + N.z);
-    float b = N.x * N.y * a;
-
-    vec3 T = vec3(1 + s * sqr(N.x) * a, s * b, -s * N.x);
-    vec3 B = vec3(b, s + sqr(N.y) * a, -N.y);
-
-    return normalize(
-          (v.x * T)
-        + (v.y * B)
-        + (v.z * N));
-}
-
-vec3 RandomOnCone(vec3 dir, float cosThetaMax)
-{
-    float u0 = RandomUNorm();
-    float cosTheta = (1 - u0) + u0 * cosThetaMax;
-    float sinTheta = sqrt(1 - cosTheta * cosTheta);
-    float phi = 2 * PI * RandomUNorm();
-
-    vec3 v1 = vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
-    return ChangeBasis(v1, dir);
-}
-
-vec2 ConcentricSampleDisk()
-{
-    vec2 uOffset = 2 * vec2(RandomUNorm(), RandomUNorm()) - vec2(1, 1);
-
-    if (uOffset.x == 0 && uOffset.y == 0)
-        return vec2(0, 0);
-
-    float theta, r;
-    if (abs(uOffset.x) > abs(uOffset.y)) {
-        r = uOffset.x;
-        theta = PI/4 * (uOffset.y / uOffset.x);
-    } else {
-        r = uOffset.y;
-        theta = PI/2 - (PI/4 * uOffset.x / uOffset.y);
-    }
-
-    return r * vec2(cos(theta), sin(theta));
-}
-
-vec3 CosineSampleHemisphere()
-{
-    vec2 d = ConcentricSampleDisk();
-    float z = sqrt(max(0, 1 - d.x * d.x - d.y * d.y));
-    return vec3(d.x, d.y, z);
-}
-
-float CosineSampleHemispherePDF(float cosTheta)
-{
-    return cosTheta / PI;
-}
-
-vec3 VCosineSampleHemisphere(float alpha)
-{
-    float cosTheta = pow(RandomUNorm(), 1 / (alpha + 1));
-    float sinTheta = sqrt(1 - cosTheta * cosTheta);
-    float phi = 2 * PI * RandomUNorm();
-    return vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
-}
-
-float VCosineSampleHemispherePDF(vec3 v, float alpha)
-{
-    float cosTheta = v.z;
-    return (cosTheta + alpha) * pow(cosTheta, alpha) / PI;
-}
-
 void main()
 {
     {
@@ -340,11 +240,15 @@ void main()
             // Tangent Space
             tangent = normalize(tangent - dot(tangent, vertNrm) * vertNrm);
             vec3 bitangent = normalize(cross(tangent, vertNrm)
-                * axiom_UnpackBitangentSign(sa0.tangentSpace));
+                // * axiom_UnpackBitangentSign(sa0.tangentSpace));
+            );
             mat3 TBN = mat3(tangent, bitangent, vertNrm);
             // flatTgt = normalize(flatTgt - dot(flatTgt, flatNrm) * flatNrm);
             // vec3 bitangent = normalize(cross(flatTgt, flatNrm));
             // mat3 TBN = mat3(flatTgt, bitangent, flatNrm);
+
+            // mat3 TBN = MakeTBN(vertNrm);
+            // tangent = TBN[0];
 
             // Texture
             vec4 baseColor_alpha = texture(sampler2D(Image2D[nonuniformEXT(geometry.material.baseColor_alpha)], Sampler[pc.linearSampler]), uv);
@@ -363,6 +267,11 @@ void main()
             vec3 nrm = texture(sampler2D(Image2D[nonuniformEXT(geometry.material.normals)], Sampler[pc.linearSampler]), uv).xyz;
             nrm = DecodeNormalMap(nrm);
             nrm = normalize(TBN * nrm);
+
+            // TBN[2] = nrm;
+            // mat3 TBN =  MakeTBN(nrm);
+            // TBN =  MakeTBN(vertNrm);
+            mat3 invTBN = inverse(TBN);
 
 // -----------------------------------------------------------------------------
 //                          Debug writeout - Begin
@@ -414,44 +323,101 @@ void main()
             // Emissive term
             color += throughput * emissivity;
 
-            if (roughness > 0.0) {
+            // if (false)
+            {
                 // BRDF
 
-                if (RandomUNorm() > 0.5)
-                {
-                    vec3 sampleDir = RandomOnCone(SunDir, SunCosTheta);
-                    if (IsUnobstructed(OffsetPointByNormal(pos, flatNrm), sampleDir, 8000000.0)) {
-                        color += throughput * SunIntensity *
-                            CookTorranceBrdf(nrm, -dir, sampleDir, baseColor, roughness, metalness, 1.5, true);
-                    }
+                float pSpecular, pDiffuse;
+                loc_CalculateLobePdfs(metalness, pSpecular, pDiffuse);
 
-                    break;
+                if (RandomUNorm() < pDiffuse)
+                {
+                    throughput /= pDiffuse;
+                    // vec3 sampleDir = RandomOnCone(SunDir, SunCosTheta);
+                    // if (IsUnobstructed(OffsetPointByNormal(pos, flatNrm), sampleDir, 8000000.0)) {
+                    //     color += throughput * SunIntensity *
+                    //         CookTorranceBrdf(nrm, -dir, sampleDir, baseColor, roughness, metalness, 1.5, true);
+                    // }
+
+                    // break;
+
+                    // vec3 wi = TBN * CosineSampleHemisphere();
+                    // {
+                    //     vec3 N = nrm;
+                    //     vec3 V = -dir;
+                    //     vec3 L = wi;
+                    //     vec3 albedo = baseColor;
+                    //     float metallic = metalness;
+                    //     float ior = 1.5;
+
+                    //     float R = pow((1 - ior) / (1 + ior), 2);
+                    //     vec3 F0 = mix(vec3(R), albedo, metallic);
+                    //     vec3 H = normalize(V + L);
+                    //     vec3 F = FresnelSchlick(max(dot(H, V), 0.0), F0);
+                    //     vec3 kS = F;
+                    //     vec3 kD = vec3(1.0) - kS;
+                    //     kD *= 1.0 - metallic;
+
+                    //     throughput *= kD * baseColor;
+                    //     dir = wi;
+                    //     origin = OffsetPointByNormal(pos, flatNrm);
+                    // }
+
+                    vec3 wo = invTBN * -dir;
+                    vec3 wi;
+                    vec3 reflectance;
+                    loc_ImportanceSampleLambert(wo,
+                        baseColor, roughness, metalness, 1.5,
+                        wi, reflectance);
+                    throughput *= reflectance;
+                    dir = TBN * wi;
+                    origin = OffsetPointByNormal(pos, flatNrm);
                 }
                 else
                 {
+                    throughput /= pSpecular;
+
                     // bool flip = RandomUNorm() > 0.5;
                     // if (flip) {
                     //     nrm = -nrm;
                     //     flatNrm = -flatNrm;
                     // }
 
-                    vec3 L = CosineSampleHemisphere();
-                    float pdf = CosineSampleHemispherePDF(L.z);
-                    L = ChangeBasis(L, nrm);
-                    pdf = clamp(pdf, 0.01, 10000);
-                    roughness = max(0.04, roughness);
+                    // vec3 L = CosineSampleHemisphere();
+                    // float pdf = CosineSampleHemispherePDF(L.z);
+                    // L = ChangeBasis(L, nrm);
+                    // pdf = clamp(pdf, 0.01, 10000);
+                    // roughness = max(0.04, roughness);
 
-                    vec3 brdf = 2.0 * CookTorranceBrdf(nrm, -dir, L, baseColor, roughness, metalness, 1.5, true);
-                    throughput *= brdf * max(dot(nrm, L), 0.0) / pdf;
-                    dir = L;
+                    // vec3 brdf = 2.0 * CookTorranceBrdf(nrm, -dir, L, baseColor, roughness, metalness, 1.5, true);
+                    // throughput *= brdf * max(dot(nrm, L), 0.0) / pdf;
+                    // dir = L;
+                    // origin = OffsetPointByNormal(pos, flatNrm);
+
+                    vec3 wo = invTBN * -dir;
+                    vec3 wi;
+                    vec3 reflectance;
+
+                    loc_ImportanceSampleGgxVdn(wo, baseColor, roughness, metalness, 1.5, wi, reflectance);
+                    // loc_ImportanceSampleGgxD(wo, baseColor, roughness, metalness, 1.5, wi, reflectance);
+
+                    // wi = reflect(wo, vec3(0, 0, 1));
+                    // reflectance = baseColor;
+
+                    // color = reflectance;
+                    // break;
+                    throughput *= reflectance;
+                    dir = TBN * wi;
+                    // dir = reflect(dir, nrm);
                     origin = OffsetPointByNormal(pos, flatNrm);
+                    // break;
                 }
             }
-            else {
-                origin = OffsetPointByNormal(pos, flatNrm);
-                dir = reflect(dir, nrm);
-                throughput *= baseColor;
-            }
+            // else {
+            //     origin = OffsetPointByNormal(pos, flatNrm);
+            //     dir = reflect(dir, nrm);
+            //     throughput *= baseColor;
+            // }
         }
     }
 
@@ -471,6 +437,10 @@ void main()
             vec4 updated = (oldWeight == 0)
                 ? new
                 : (prev * oldWeight) + (new * newWeight);
+
+            if (IsNanOrInf(updated.rgb)) {
+                updated = vec4(1, 0, 1, 1);
+            }
 
             imageStore(RWImage2D[pc.target], imgPos, updated);
         }

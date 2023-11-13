@@ -1,5 +1,7 @@
 #include "axiom_GltfImporter.hpp"
 
+#include <nova/core/nova_Containers.hpp>
+
 #include <fastgltf/parser.hpp>
 #include <fastgltf/glm_element_traits.hpp>
 
@@ -55,6 +57,15 @@ namespace axiom
         }
 
         asset = std::make_unique<fastgltf::Asset>(std::move(res.get()));
+
+        {
+            NOVA_LOG("Validating...");
+            auto error = fastgltf::validate(*asset);
+            if (error != fastgltf::Error::None) {
+                NOVA_THROW("Validation error loading [{}] - {}", path.string(), fastgltf::getErrorMessage(error));
+            }
+            NOVA_LOG("passed validation...");
+        }
 
         // Textures
 
@@ -146,7 +157,7 @@ namespace axiom
                 if (texture) outMaterial.properties.emplace_back(name, scene_ir::TextureSwizzle{ .textureIdx = u32(texture->textureIndex) }); },
             [&](std::string_view name, fastgltf::Optional<fastgltf::NormalTextureInfo>& texture) {
                 if (texture) outMaterial.properties.emplace_back(name, scene_ir::TextureSwizzle{ .textureIdx = u32(texture->textureIndex) }); },
-            [&](std::string_view name, Span<f32> values) {
+            [&](std::string_view name, nova::Span<f32> values) {
                 switch (values.size()) {
                     break;case 1: outMaterial.properties.emplace_back(name, values[0]);
                     break;case 2: outMaterial.properties.emplace_back(name, Vec2(values[0], values[1]));

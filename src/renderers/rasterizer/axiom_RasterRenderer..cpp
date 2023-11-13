@@ -1,6 +1,5 @@
 #include "axiom_Renderer.hpp"
 
-#include <nova/core/nova_SubAllocation.hpp>
 #include <nova/rhi/vulkan/glsl/nova_VulkanGlsl.hpp>
 
 #ifndef VK_NO_PROTOTYPES
@@ -191,12 +190,7 @@ namespace axiom
         cmd.SetBlendState({ true, false });
         cmd.SetViewports({{{0, size.y}, Vec2I(size.x, -i32(size.y))}}, true);
         cmd.SetDepthState(true, true, nova::CompareOp::Greater);
-        cmd.SetPolygonState(
-            nova::Topology::Triangles,
-            nova::PolygonMode::Fill,
-            nova::CullMode::None,
-            nova::FrontFace::CounterClockwise,
-            1.f);
+        cmd.SetCullState(nova::CullMode::None, nova::FrontFace::CounterClockwise);
         cmd.BindShaders({ vertexShader, fragmentShader });
 
         struct PushConstants

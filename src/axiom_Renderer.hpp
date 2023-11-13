@@ -2,7 +2,6 @@
 
 #include <scene/runtime/axiom_CompiledScene.hpp>
 
-#include <nova/core/nova_SubAllocation.hpp>
 #include <nova/rhi/nova_RHI.hpp>
 
 namespace axiom

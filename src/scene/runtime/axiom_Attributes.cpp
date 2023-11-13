@@ -72,7 +72,7 @@ namespace axiom
         // Given a normal and tangent vector, encode the tangent as a single float that can be
         // subsequently quantized.
         inline
-        f32 EncodeTangent(Vec3 normal, Vec3 tangent)
+        f32 EncodeTangent(Vec3 normal, Vec3 tangent, bool& choice)
         {
             // First, find a canonical direction in the tangent plane
             Vec3 t1;
@@ -80,11 +80,13 @@ namespace axiom
             {
                 // Pick a canonical direction orthogonal to n with z = 0
                 t1 = Vec3(normal.y, -normal.x, 0.f);
+                choice = true;
             }
             else
             {
                 // Pick a canonical direction orthogonal to n with y = 0
                 t1 = Vec3(normal.z, 0.f, -normal.x);
+                choice = false;
             }
             t1 = glm::normalize(t1);
 
@@ -254,11 +256,12 @@ namespace axiom
                 f32(ts.octS)
             ));
 
-            auto encTangent = EncodeTangent(decodeNormal, tbn.tangent);
+            bool tgtChoice;
+            auto encTangent = EncodeTangent(decodeNormal, tbn.tangent, tgtChoice);
             ts.tgtA = u32(encTangent * 1023.0);
-
-            auto encBitangent = glm::dot(glm::cross(tbn.normal, tbn.tangent), tbn.bitangent) > 0.f;
-            ts.tgtS = u32(encBitangent);
+            ts.tgtS = u32(tgtChoice);
+            // auto encBitangent = glm::dot(glm::cross(tbn.normal, tbn.tangent), tbn.bitangent) > 0.f;
+            // ts.tgtS = u32(encBitangent);
 
             outTangentSpaces.Get<GPU_TangentSpace>(i) = ts;
 
