@@ -1,7 +1,8 @@
-#version 460
 #extension GL_EXT_scalar_block_layout  : require
 #extension GL_EXT_buffer_reference2    : require
 #extension GL_EXT_nonuniform_qualifier : require
+
+#include "src/scene/runtime/axiom_Attributes.glsl"
 
 layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer PosAttrib {
     vec3 position;

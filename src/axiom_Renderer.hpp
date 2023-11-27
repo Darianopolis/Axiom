@@ -33,7 +33,7 @@ namespace axiom
 
         virtual void ResetSamples() = 0;
         virtual void SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov) = 0;
-        virtual void Record(nova::CommandList cmd, nova::Texture target) = 0;
+        virtual void Record(nova::CommandList cmd, nova::Image target) = 0;
     };
 
     inline

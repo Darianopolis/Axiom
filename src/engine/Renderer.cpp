@@ -246,9 +246,9 @@ namespace axiom
         //         break;default: std::unreachable();
         //     }
 
-        //     textures[i] = nova::Texture::Create(engine->context,
+        //     textures[i] = nova::Image::Create(engine->context,
         //         Vec3U(texture.size, 0),
-        //         nova::TextureUsage::Sampled,
+        //         nova::ImageUsage::Sampled,
         //         nova_format,
         //         {});
 
@@ -300,8 +300,8 @@ namespace axiom
         if (!depth_buffer || depth_buffer.GetExtent() != target.GetExtent()) {
             depth_buffer.Destroy();
 
-            depth_buffer = nova::Texture::Create(engine->context, { extent, 0 },
-                nova::TextureUsage::DepthStencilAttach,
+            depth_buffer = nova::Image::Create(engine->context, { extent, 0 },
+                nova::ImageUsage::DepthStencilAttach,
                 nova::Format::D32_SFloat,
                 {});
         }

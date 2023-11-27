@@ -61,13 +61,10 @@ namespace axiom
                 .Slice(range.vertex_offset, vertex_count)
                 .CopyTo({ out_mesh->position_attributes.data(), vertex_count });
 
-            geometry.tangent_spaces
-                .Slice(range.vertex_offset, vertex_count)
-                .CopyTo({ (imp::Basis*)&out_mesh->shading_attributes[0].tangent_space, vertex_count, sizeof(out_mesh->shading_attributes[0]) });
-
-            geometry.tex_coords
-                .Slice(range.vertex_offset, vertex_count)
-                .CopyTo({ (imp::Vec2<imp::Float16>*)&out_mesh->shading_attributes[0].tex_coords, vertex_count, sizeof(out_mesh->shading_attributes[0]) });
+            for (u32 i = 0; i < vertex_count; ++i) {
+                out_mesh->shading_attributes[i].tangent_space = std::bit_cast<GPU_TangentSpace>(geometry.tangent_spaces[i]);
+                out_mesh->shading_attributes[i].tex_coords = std::bit_cast<GPU_TexCoords>(geometry.tex_coords[i]);
+            }
 
             out_mesh->sub_meshes.emplace_back(TriSubMesh {
                 .vertex_offset = 0,

@@ -1,4 +1,3 @@
-#version 460
 #extension GL_EXT_fragment_shader_barycentric : require
 
 layout(location = 0) in pervertexEXT vec3 inPosition[3];

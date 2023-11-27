@@ -42,7 +42,7 @@ namespace axiom
         nova::Buffer               geometries;
         nova::Buffer               geometry_ranges;
 
-        std::vector<nova::Texture> textures;
+        std::vector<nova::Image> textures;
         nova::Buffer               materials;
 
         nova::Buffer               transform_nodes;
@@ -52,7 +52,7 @@ namespace axiom
         std::vector<nova::AccelerationStructure> mesh_groups;
 
     public:
-        nova::Texture depth_buffer;
+        nova::Image depth_buffer;
 
     public:
         Vec3 position = Vec3(0.f, 0.f, 1.f);

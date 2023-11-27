@@ -45,7 +45,7 @@ namespace axiom
         nova::Shader   vertex_shader;
         nova::Shader fragment_shader;
 
-        nova::Texture depth_image;
+        nova::Image depth_image;
 
         Mat4 view_proj;
 
@@ -55,7 +55,7 @@ namespace axiom
         virtual void CompileScene(CompiledScene& scene, nova::CommandPool cmd_pool, nova::Fence fence);
 
         virtual void SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov);
-        virtual void Record(nova::CommandList cmd, nova::Texture target);
+        virtual void Record(nova::CommandList cmd, nova::Image target);
 
         virtual void ResetSamples() {}
     };
@@ -173,13 +173,13 @@ namespace axiom
         view_proj = proj * view;
     }
 
-    void RasterRenderer::Record(nova::CommandList cmd, nova::Texture target)
+    void RasterRenderer::Record(nova::CommandList cmd, nova::Image target)
     {
         if (!depth_image || depth_image.GetExtent() != target.GetExtent()) {
             depth_image.Destroy();
 
-            depth_image = nova::Texture::Create(context, { Vec2U(target.GetExtent()), 0 },
-                nova::TextureUsage::DepthStencilAttach,
+            depth_image = nova::Image::Create(context, { Vec2U(target.GetExtent()), 0 },
+                nova::ImageUsage::DepthStencilAttach,
                 nova::Format::D32_SFloat,
                 {});
         }

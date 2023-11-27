@@ -226,5 +226,40 @@ namespace axiom
             out_instance->mesh = out_scene.meshes[mesh_offset + in_instance.mesh_idx];
             out_instance->transform = in_instance.transform;
         }
+
+        // {
+        //     auto joined_mesh = Ref<TriMesh>::Create();
+
+        //     for (auto& in_instance : in_scene.instances) {
+        //         auto& in_mesh = out_scene.meshes[in_instance.mesh_idx];
+        //         u32 vertex_offset = u32(joined_mesh->position_attributes.size());
+        //         u32 index_offset = u32(joined_mesh->indices.size());
+        //         for (u32 i = 0; i < in_mesh->position_attributes.size(); ++i) {
+        //             auto pos = in_mesh->position_attributes[i];
+        //             auto sa = in_mesh->shading_attributes[i];
+        //             joined_mesh->position_attributes.push_back(in_instance.transform * Vec4(pos, 1.f));
+        //             joined_mesh->shading_attributes.push_back(sa);
+        //         }
+        //         for (u32 i = 0; i < in_mesh->indices.size(); ++i) {
+        //             auto index = in_mesh->indices[i];
+        //             joined_mesh->indices.push_back(index);
+        //         }
+        //         auto sub_mesh = in_mesh->sub_meshes.front();
+        //         sub_mesh.vertex_offset = vertex_offset;
+        //         sub_mesh.first_index = index_offset;
+
+        //         joined_mesh->sub_meshes.push_back(sub_mesh);
+        //     }
+
+        //     auto out_instance = Ref<TriMeshInstance>::Create();
+        //     out_instance->mesh = joined_mesh;
+        //     out_instance->transform = Mat4(1.f);
+
+        //     out_scene.instances.clear();
+        //     out_scene.meshes.clear();
+
+        //     out_scene.instances.push_back(out_instance);
+        //     out_scene.meshes.push_back(joined_mesh);
+        // }
     }
 }

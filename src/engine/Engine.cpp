@@ -25,7 +25,7 @@ namespace axiom
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         window = glfwCreateWindow(1920, 1080, "Axiom", nullptr, nullptr);
         swapchain = nova::Swapchain::Create(context, glfwGetWin32Window(window),
-            nova::TextureUsage::Storage | nova::TextureUsage::ColorAttach,
+            nova::ImageUsage::Storage | nova::ImageUsage::ColorAttach,
             nova::PresentMode::Mailbox);
 
         glfwSetWindowUserPointer(window, this);

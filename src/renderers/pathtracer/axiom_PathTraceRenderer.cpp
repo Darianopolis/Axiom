@@ -54,12 +54,12 @@ namespace axiom
 
         nova::Sampler linear_sampler;
 
-        nova::Texture accumulation_target;
+        nova::Image accumulation_target;
         u32                  sample_count;
 
         nova::Buffer                        material_buffer;
         nova::HashMap<void*, u64>        material_addresses;
-        nova::HashMap<void*, nova::Texture> loaded_textures;
+        nova::HashMap<void*, nova::Image> loaded_textures;
 
         nova::Buffer       shading_attributes_buffer;
         nova::Buffer                    index_buffer;
@@ -95,7 +95,7 @@ namespace axiom
         virtual void CompileScene(CompiledScene& scene, nova::CommandPool cmd_pool, nova::Fence fence);
 
         virtual void SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov);
-        virtual void Record(nova::CommandList cmd, nova::Texture target);
+        virtual void Record(nova::CommandList cmd, nova::Image target);
         virtual void ResetSamples();
     };
 
@@ -169,9 +169,9 @@ namespace axiom
             auto& loaded_texture = loaded_textures.at(texture.Raw());
 
             if (texture->data.size()) {
-                loaded_texture = nova::Texture::Create(context,
+                loaded_texture = nova::Image::Create(context,
                     Vec3U(texture->size, 0),
-                    nova::TextureUsage::Sampled,
+                    nova::ImageUsage::Sampled,
                     texture->format,
                     {});
 
@@ -228,6 +228,7 @@ namespace axiom
 
         raygen_shader = nova::Shader::Create(context, nova::ShaderStage::RayGen, "main",
             nova::glsl::Compile(nova::ShaderStage::RayGen, "main", "src/renderers/pathtracer/axiom_RayGen.glsl", {}));
+            // nova::glsl::Compile(nova::ShaderStage::RayGen, "main", "src/renderers/pathtracer/axiom_RayDebug.glsl", {}));
 
         constexpr u32 SBT_Opaque      = 0;
         constexpr u32 SBT_AlphaMasked = 1;
@@ -487,7 +488,7 @@ namespace axiom
         }
     }
 
-    void PathTraceRenderer::Record(nova::CommandList cmd, nova::Texture target)
+    void PathTraceRenderer::Record(nova::CommandList cmd, nova::Image target)
     {
         auto size = target.GetExtent();
 
@@ -496,12 +497,12 @@ namespace axiom
         if (!accumulation_target || accumulation_target.GetExtent() != size) {
             accumulation_target.Destroy();
 
-            accumulation_target = nova::Texture::Create(context, Vec3U(Vec2U(size), 0),
-                nova::TextureUsage::Storage,
+            accumulation_target = nova::Image::Create(context, Vec3U(Vec2U(size), 0),
+                nova::ImageUsage::Storage,
                 nova::Format::RGBA32_SFloat,
                 {});
 
-            accumulation_target.Transition(nova::TextureLayout::GeneralImage);
+            accumulation_target.Transition(nova::ImageLayout::GeneralImage);
 
             sample_count = 0;
         }
@@ -554,6 +555,7 @@ namespace axiom
             .instances = instance_data_buffer.GetAddress(),
             .noise_seed = noise_buffer.GetAddress(),
             .target = accumulation_target.GetDescriptor(),
+            // .target = target.GetDescriptor(),
             .pos = view_pos,
             .cam_x = view_rot * Vec3(1.f, 0.f, 0.f),
             .cam_y = view_rot * Vec3(0.f, 1.f, 0.f),

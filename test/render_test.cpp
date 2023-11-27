@@ -169,9 +169,9 @@ int main(int argc, char* argv[])
 
     auto swapchain = nova::Swapchain::Create(context,
         glfwGetWin32Window(window),
-        nova::TextureUsage::Storage
-        | nova::TextureUsage::ColorAttach
-        | nova::TextureUsage::TransferDst,
+        nova::ImageUsage::Storage
+        | nova::ImageUsage::ColorAttach
+        | nova::ImageUsage::TransferDst,
         nova::PresentMode::Mailbox);
     NOVA_DEFER(&) {
         fence.Wait();
