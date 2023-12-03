@@ -1,11 +1,5 @@
 #include "Engine.hpp"
 
-#define GLFW_EXPOSE_NATIVE_WIN32
-#define NOMINMAX
-#define WIN32_LEAN_AND_MEAN
-#include <GLFW/glfw3.h>
-#include <GLFW/glfw3native.h>
-
 namespace axiom
 {
     void Engine::Init()
@@ -21,24 +15,28 @@ namespace axiom
         sampler = nova::Sampler::Create(context, nova::Filter::Linear,
             nova::AddressMode::Repeat, nova::BorderColor::TransparentBlack, 0.f);
 
-        glfwInit();
-        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        window = glfwCreateWindow(1920, 1080, "Axiom", nullptr, nullptr);
-        swapchain = nova::Swapchain::Create(context, glfwGetWin32Window(window),
+        app = nova::Application::Create();
+
+        window = nova::Window::Create(app, {
+            .title = "Axiom",
+            .size = { 1920, 1080 },
+        });
+
+        swapchain = nova::Swapchain::Create(context, window.GetNativeHandle(),
             nova::ImageUsage::Storage | nova::ImageUsage::ColorAttach,
             nova::PresentMode::Mailbox);
-
-        glfwSetWindowUserPointer(window, this);
-        glfwSetScrollCallback(window, [](auto* w, f64, f64 y) {
-            auto* self = static_cast<Engine*>(glfwGetWindowUserPointer(w));
-            self->scroll_offset += y;
-        });
 
         imgui = new nova::imgui::ImGuiLayer({
             // .flags = ImGuiConfigFlags_DockingEnable,
             .window = window,
             .context = context,
             .sampler = sampler,
+        });
+
+        app.AddCallback([&](const nova::AppEvent& event) {
+            if (event.type == nova::EventType::MouseScroll) {
+                scroll_offset += event.scroll.scrolled.y;
+            }
         });
 
         imgui->no_dock_bg = true;
@@ -54,7 +52,7 @@ namespace axiom
 
         delete imgui;
         swapchain.Destroy();
-        glfwTerminate();
+        app.Destroy();
         sampler.Destroy();
         cmd_pool.Destroy();
         fence.Destroy();
@@ -63,11 +61,11 @@ namespace axiom
 
     bool Engine::Update()
     {
-        if (glfwWindowShouldClose(window)) {
+        if (!app.IsRunning()) {
             return false;
         }
 
-        glfwPollEvents();
+        app.PollEvents();
 
         fence.Wait();
         queue.Acquire({swapchain}, {fence});

@@ -333,10 +333,11 @@ void main()
                 if (RandomUNorm() < pDiffuse)
                 {
                     throughput /= pDiffuse;
+
                     // vec3 sampleDir = RandomOnCone(SunDir, SunCosTheta);
                     // if (IsUnobstructed(OffsetPointByNormal(pos, flatNrm), sampleDir, 8000000.0)) {
                     //     color += throughput * SunIntensity *
-                    //         CookTorranceBrdf(nrm, -dir, sampleDir, baseColor, roughness, metalness, 1.5, true);
+                    //         CookTorranceBrdf(nrm, -dir, sampleDir, baseColor, roughness, metalness, 1.5);
                     // }
 
                     // break;

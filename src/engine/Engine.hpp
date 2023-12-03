@@ -28,14 +28,15 @@ namespace axiom
         nova::CommandList      cmd;
         nova::Sampler      sampler;
 
-        struct GLFWwindow*      window;
+        nova::Application          app;
+        nova::Window            window;
         nova::Swapchain      swapchain;
         nova::imgui::ImGuiLayer* imgui;
 
         std::vector<Step*>  steps;
 
     public:
-        f64 scroll_offset;
+        f32 scroll_offset;
 
     public:
         void Init();

@@ -4,15 +4,10 @@
 
 #include <nova/core/nova_Guards.hpp>
 #include <nova/core/nova_ToString.hpp>
+#include <nova/core/win32/nova_Win32Include.hpp>
 
 #include <imp/imp_Importer.hpp>
 #include <imp/imp_Scene.hpp>
-
-#define GLFW_EXPOSE_NATIVE_WIN32
-#define NOMINMAX
-#define WIN32_LEAN_AND_MEAN
-#include <glfw/glfw3.h>
-#include <GLFW/glfw3native.h>
 
 struct DemoStep : axiom::Step
 {
@@ -41,12 +36,12 @@ struct DemoStep : axiom::Step
 
         {
             Vec3 translate = {};
-            if (glfwGetKey(engine.window, GLFW_KEY_W))          translate += Vec3( 0.f,  0.f, -1.f);
-            if (glfwGetKey(engine.window, GLFW_KEY_A))          translate += Vec3(-1.f,  0.f,  0.f);
-            if (glfwGetKey(engine.window, GLFW_KEY_S))          translate += Vec3( 0.f,  0.f,  1.f);
-            if (glfwGetKey(engine.window, GLFW_KEY_D))          translate += Vec3( 1.f,  0.f,  0.f);
-            if (glfwGetKey(engine.window, GLFW_KEY_LEFT_SHIFT)) translate += Vec3( 0.f, -1.f,  0.f);
-            if (glfwGetKey(engine.window, GLFW_KEY_SPACE))      translate += Vec3( 0.f,  1.f,  0.f);
+            if (engine.app.IsVirtualKeyDown(nova::VirtualKey::W))         translate += Vec3( 0.f,  0.f, -1.f);
+            if (engine.app.IsVirtualKeyDown(nova::VirtualKey::A))         translate += Vec3(-1.f,  0.f,  0.f);
+            if (engine.app.IsVirtualKeyDown(nova::VirtualKey::S))         translate += Vec3( 0.f,  0.f,  1.f);
+            if (engine.app.IsVirtualKeyDown(nova::VirtualKey::D))         translate += Vec3( 1.f,  0.f,  0.f);
+            if (engine.app.IsVirtualKeyDown(nova::VirtualKey::LeftShift)) translate += Vec3( 0.f, -1.f,  0.f);
+            if (engine.app.IsVirtualKeyDown(nova::VirtualKey::Space))     translate += Vec3( 0.f,  1.f,  0.f);
             if (translate.x || translate.y || translate.z) {
                 renderer.position += renderer.rotation * (glm::normalize(translate) * move_speed * time_step);
             }
@@ -54,7 +49,7 @@ struct DemoStep : axiom::Step
 
         {
             Vec2 delta = {};
-            if (GetFocus() == glfwGetWin32Window(engine.window) && glfwGetMouseButton(engine.window, GLFW_MOUSE_BUTTON_2)) {
+            if (GetFocus() == engine.window.GetNativeHandle() && engine.app.IsVirtualKeyDown(nova::VirtualKey::MouseSecondary)) {
                 POINT p;
                 GetCursorPos(&p);
                 LONG dx = p.x - saved_pos.x;
@@ -72,7 +67,7 @@ struct DemoStep : axiom::Step
                 last_mouse_drag = false;
             }
 
-            if ((delta.x || delta.y) && glfwGetMouseButton(engine.window, GLFW_MOUSE_BUTTON_2)) {
+            if ((delta.x || delta.y) && engine.app.IsVirtualKeyDown(nova::VirtualKey::MouseSecondary)) {
                 renderer.rotation = glm::angleAxis(delta.x * mouse_speed, Vec3(0.f, -1.f, 0.f)) * renderer.rotation;
                 auto pitched_rot = renderer.rotation * glm::angleAxis(delta.y * mouse_speed, Vec3(-1.f, 0.f, 0.f));
                 if (glm::dot(pitched_rot * Vec3(0.f, 1.f,  0.f), Vec3(0.f, 1.f, 0.f)) >= 0.f) {

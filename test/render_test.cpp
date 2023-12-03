@@ -13,11 +13,8 @@
 #include <nova/core/nova_ToString.hpp>
 #include <nova/ui/nova_ImGui.hpp>
 
-#define GLFW_EXPOSE_NATIVE_WIN32
-#define NOMINMAX
-#define WIN32_LEAN_AND_MEAN
-#include <GLFW/glfw3.h>
-#include <GLFW/glfw3native.h>
+#include <nova/window/nova_Window.hpp>
+#include <nova/core/win32/nova_Win32Include.hpp>
 
 using namespace nova::types;
 
@@ -161,14 +158,16 @@ int main(int argc, char* argv[])
     NOVA_LOG("Setting up window...");
 // -----------------------------------------------------------------------------
 
-    glfwInit();
-    NOVA_DEFER(&) { glfwTerminate(); };
+    auto app = nova::Application::Create();
+    NOVA_DEFER(&) { app.Destroy(); };
 
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    auto window = glfwCreateWindow(1920, 1080, "Axiom", nullptr, nullptr);
+    auto window = nova::Window::Create(app, {
+        .title = "Axiom",
+        .size = { 1920, 1080 },
+    });
 
     auto swapchain = nova::Swapchain::Create(context,
-        glfwGetWin32Window(window),
+        window.GetNativeHandle(),
         nova::ImageUsage::Storage
         | nova::ImageUsage::ColorAttach
         | nova::ImageUsage::TransferDst,
@@ -178,18 +177,29 @@ int main(int argc, char* argv[])
         swapchain.Destroy();
     };
 
-    static f32 move_speed = 1.f;
-    glfwSetScrollCallback(window, [](auto, f64, f64 dy) {
-        if (!ImGui::GetIO().WantCaptureMouse) {
-            if (dy > 0) move_speed *= 1.5f;
-            if (dy < 0) move_speed /= 1.5f;
-        }
-    });
+    // TODO: Callbacks
 
-    static bool show_settings = true;
-    glfwSetKeyCallback(window, [](auto, int key, int scancode, int action, int mods) {
-        if (key == GLFW_KEY_F1 && action == GLFW_PRESS) {
-            show_settings = !show_settings;
+    f32 move_speed = 1.f;
+    bool show_settings = true;
+    bool fullscreen = false;
+
+    app.AddCallback([&](const nova::AppEvent& event) {
+        switch (event.type) {
+            break;case nova::EventType::MouseScroll:
+                if (!ImGui::GetIO().WantCaptureMouse) {
+                    if (event.scroll.scrolled.y > 0.f) move_speed *= 1.5f;
+                    if (event.scroll.scrolled.y < 0.f) move_speed /= 1.5f;
+                }
+            break;case nova::EventType::Input:
+                if (event.input.pressed) {
+                    switch (app.ToVirtualKey(event.input.channel)) {
+                        break;case nova::VirtualKey::F1:
+                            show_settings = !show_settings;
+                        break;case nova::VirtualKey::F11:
+                            fullscreen = !fullscreen;
+                            window.SetFullscreen(fullscreen);
+                    }
+                }
         }
     });
 
@@ -290,8 +300,8 @@ int main(int argc, char* argv[])
     */
 
     NOVA_DEFER(&) { fence.Wait(); };
-    while (!glfwWindowShouldClose(window)) {
-        glfwPollEvents();
+    while (app.IsRunning()) {
+        app.PollEvents();
         imgui.BeginFrame();
 
         fence.Wait();
@@ -321,12 +331,12 @@ int main(int argc, char* argv[])
 
         {
             Vec3 translate = {};
-            if (glfwGetKey(window, GLFW_KEY_W))          translate += Vec3( 0.f,  0.f, -1.f);
-            if (glfwGetKey(window, GLFW_KEY_A))          translate += Vec3(-1.f,  0.f,  0.f);
-            if (glfwGetKey(window, GLFW_KEY_S))          translate += Vec3( 0.f,  0.f,  1.f);
-            if (glfwGetKey(window, GLFW_KEY_D))          translate += Vec3( 1.f,  0.f,  0.f);
-            if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT)) translate += Vec3( 0.f, -1.f,  0.f);
-            if (glfwGetKey(window, GLFW_KEY_SPACE))      translate += Vec3( 0.f,  1.f,  0.f);
+            if (app.IsVirtualKeyDown(nova::VirtualKey::W))         translate += Vec3( 0.f,  0.f, -1.f);
+            if (app.IsVirtualKeyDown(nova::VirtualKey::A))         translate += Vec3(-1.f,  0.f,  0.f);
+            if (app.IsVirtualKeyDown(nova::VirtualKey::S))         translate += Vec3( 0.f,  0.f,  1.f);
+            if (app.IsVirtualKeyDown(nova::VirtualKey::D))         translate += Vec3( 1.f,  0.f,  0.f);
+            if (app.IsVirtualKeyDown(nova::VirtualKey::LeftShift)) translate += Vec3( 0.f, -1.f,  0.f);
+            if (app.IsVirtualKeyDown(nova::VirtualKey::Space))     translate += Vec3( 0.f,  1.f,  0.f);
             if (translate.x || translate.y || translate.z) {
                 position += rotation * (glm::normalize(translate) * move_speed * delta_time);
             }
@@ -334,7 +344,7 @@ int main(int argc, char* argv[])
 
         {
             Vec2 delta = {};
-            if (GetFocus() == glfwGetWin32Window(window) && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_2)) {
+            if (GetFocus() == (HWND)window.GetNativeHandle() && app.IsVirtualKeyDown(nova::VirtualKey::MouseSecondary)) {
                 POINT p;
                 GetCursorPos(&p);
                 LONG dx = p.x - saved_pos.x;
@@ -352,7 +362,7 @@ int main(int argc, char* argv[])
                 last_mouse_drag = false;
             }
 
-            if ((delta.x || delta.y) && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_2)) {
+            if ((delta.x || delta.y) && app.IsVirtualKeyDown(nova::VirtualKey::MouseSecondary)) {
                 rotation = glm::angleAxis(delta.x * mouse_speed, Vec3(0.f, -1.f, 0.f)) * rotation;
                 auto pitched_rot = rotation * glm::angleAxis(delta.y * mouse_speed, Vec3(-1.f, 0.f, 0.f));
                 if (glm::dot(pitched_rot * Vec3(0.f, 1.f,  0.f), Vec3(0.f, 1.f, 0.f)) >= 0.f) {

@@ -365,8 +365,8 @@ namespace axiom
                     // Add geometry to build
 
                     builder.SetTriangles(j,
-                        pos_attrib_buffer.GetAddress() +  sub_mesh.vertex_offset                  * sizeof(Vec3), nova::Format::RGBA32_SFloat, u32(sizeof(Vec3)), sub_mesh.max_vertex,
-                            index_buffer.GetAddress() + (sub_mesh.first_index + data.first_index) * sizeof(u32),  nova::IndexType::U32,                           sub_mesh.index_count / 3);
+                        pos_attrib_buffer.GetAddress() +  sub_mesh.vertex_offset                   * sizeof(Vec3), nova::Format::RGBA32_SFloat, u32(sizeof(Vec3)), sub_mesh.max_vertex,
+                             index_buffer.GetAddress() + (sub_mesh.first_index + data.first_index) * sizeof(u32),  nova::IndexType::U32,                           sub_mesh.index_count / 3);
 
                     // Store geometry offsets and material
 
