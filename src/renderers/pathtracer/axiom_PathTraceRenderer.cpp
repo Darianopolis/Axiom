@@ -3,8 +3,6 @@
 #include <nova/core/nova_ToString.hpp>
 #include <nova/core/nova_Guards.hpp>
 
-#include <nova/rhi/vulkan/glsl/nova_VulkanGlsl.hpp>
-
 #include <rdo_bc_encoder.h>
 
 namespace axiom
@@ -217,18 +215,18 @@ namespace axiom
 
         // Shaders
 
-        postprocess_shader = nova::Shader::Create(context, nova::ShaderStage::Compute, "main",
-            nova::glsl::Compile(nova::ShaderStage::Compute, "main", "src/renderers/pathtracer/axiom_PostProcess.glsl", {}));
+        postprocess_shader = nova::Shader::Create(context, nova::ShaderLang::Glsl,
+            nova::ShaderStage::Compute, "main", "src/renderers/pathtracer/axiom_PostProcess.glsl", {});
 
-        anyhit_shader = nova::Shader::Create(context, nova::ShaderStage::AnyHit, "main",
-            nova::glsl::Compile(nova::ShaderStage::AnyHit, "main", "src/renderers/pathtracer/axiom_AnyHit.glsl", {}));
+        anyhit_shader = nova::Shader::Create(context, nova::ShaderLang::Glsl,
+            nova::ShaderStage::AnyHit, "main", "src/renderers/pathtracer/axiom_AnyHit.glsl", {});
 
-        closesthit_shader = nova::Shader::Create(context, nova::ShaderStage::ClosestHit, "main",
-            nova::glsl::Compile(nova::ShaderStage::ClosestHit, "main", "src/renderers/pathtracer/axiom_ClosestHit.glsl", {}));
+        closesthit_shader = nova::Shader::Create(context, nova::ShaderLang::Glsl,
+            nova::ShaderStage::ClosestHit, "main", "src/renderers/pathtracer/axiom_ClosestHit.glsl", {});
 
-        raygen_shader = nova::Shader::Create(context, nova::ShaderStage::RayGen, "main",
-            nova::glsl::Compile(nova::ShaderStage::RayGen, "main", "src/renderers/pathtracer/axiom_RayGen.glsl", {}));
-            // nova::glsl::Compile(nova::ShaderStage::RayGen, "main", "src/renderers/pathtracer/axiom_RayDebug.glsl", {}));
+        raygen_shader = nova::Shader::Create(context, nova::ShaderLang::Glsl,
+            nova::ShaderStage::RayGen, "main", "src/renderers/pathtracer/axiom_RayGen.glsl", {});
+            // nova::ShaderStage::RayGen, "main", "src/renderers/pathtracer/axiom_RayDebug.glsl", {});
 
         constexpr u32 SBT_Opaque      = 0;
         constexpr u32 SBT_AlphaMasked = 1;

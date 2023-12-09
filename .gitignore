@@ -1,6 +1,11 @@
 .vscode/
+.bldr/
+.idea/
+cmake-build-release/
+cmake-build-debug/
 build/
 out/
 cache/
 assets/models
+CMakeLists.txt
 imgui.ini

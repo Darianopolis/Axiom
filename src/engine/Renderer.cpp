@@ -1,7 +1,5 @@
 #include "Renderer.hpp"
 
-#include <nova/rhi/vulkan/glsl/nova_VulkanGlsl.hpp>
-
 namespace axiom
 {
     static
@@ -120,43 +118,39 @@ namespace axiom
             } pc;
         )glsl";
 
-        vertex_shader = nova::Shader::Create(engine->context, nova::ShaderStage::Vertex, "main", {
-            nova::glsl::Compile(nova::ShaderStage::Vertex, "main", "", {
-                preamble,
-                R"glsl(
-                    layout(location = 0) out vec3 out_position;
-                    void main() {
-                        Mesh mesh = pc.meshes[gl_InstanceIndex];
-                        GeometryRange geom_range = pc.geometry_ranges[mesh.geometry_range];
-                        Geometry geometry = pc.geometries[geom_range.geometry];
-                        vec3 pos = geometry.positions[gl_VertexIndex].value;
-                        out_position = pos;
-                        gl_Position = pc.view_proj * vec4(mesh.transform * vec4(pos, 1), 1);
-                    }
-                )glsl"
-            })
+        vertex_shader = nova::Shader::Create(engine->context, nova::ShaderLang::Glsl, nova::ShaderStage::Vertex, "main", "", {
+            preamble,
+            R"glsl(
+                layout(location = 0) out vec3 out_position;
+                void main() {
+                    Mesh mesh = pc.meshes[gl_InstanceIndex];
+                    GeometryRange geom_range = pc.geometry_ranges[mesh.geometry_range];
+                    Geometry geometry = pc.geometries[geom_range.geometry];
+                    vec3 pos = geometry.positions[gl_VertexIndex].value;
+                    out_position = pos;
+                    gl_Position = pc.view_proj * vec4(mesh.transform * vec4(pos, 1), 1);
+                }
+            )glsl"
         });
 
-        fragment_shader = nova::Shader::Create(engine->context, nova::ShaderStage::Fragment, "main", {
-            nova::glsl::Compile(nova::ShaderStage::Fragment, "main", "", {
-                R"glsl(
-                    #extension GL_EXT_fragment_shader_barycentric : require
+        fragment_shader = nova::Shader::Create(engine->context, nova::ShaderLang::Glsl, nova::ShaderStage::Fragment, "main", "", {
+            R"glsl(
+                #extension GL_EXT_fragment_shader_barycentric : require
 
-                    layout(location = 0) in pervertexEXT vec3 in_position[3];
-                    layout(location = 0) out vec4 out_color;
+                layout(location = 0) in pervertexEXT vec3 in_position[3];
+                layout(location = 0) out vec4 out_color;
 
-                    void main()
-                    {
-                        vec3 v01 = in_position[1] - in_position[0];
-                        vec3 v02 = in_position[2] - in_position[0];
-                        vec3 nrm = normalize(cross(v01, v02));
-                        if (!gl_FrontFacing) {
-                            nrm = -nrm;
-                        }
-                        out_color = vec4((nrm * 0.5 + 0.5) * 0.75, 1.0);
+                void main()
+                {
+                    vec3 v01 = in_position[1] - in_position[0];
+                    vec3 v02 = in_position[2] - in_position[0];
+                    vec3 nrm = normalize(cross(v01, v02));
+                    if (!gl_FrontFacing) {
+                        nrm = -nrm;
                     }
-                )glsl"
-            })
+                    out_color = vec4((nrm * 0.5 + 0.5) * 0.75, 1.0);
+                }
+            )glsl"
         });
 
         constexpr auto usage = nova::BufferUsage::Storage;

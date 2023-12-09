@@ -3,13 +3,6 @@ if Project "axiom" then
     Include "src"
     Import {
         "nova",
-        "meshoptimizer",
-        "stb",
-        "bc7enc",
-        "assimp",
-        "fastgltf",
-        "fast-obj",
-        "ufbx",
         "base64",
         "imp",
     }

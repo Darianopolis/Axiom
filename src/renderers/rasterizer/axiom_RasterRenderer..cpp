@@ -1,7 +1,5 @@
 #include "axiom_Renderer.hpp"
 
-#include <nova/rhi/vulkan/glsl/nova_VulkanGlsl.hpp>
-
 #ifndef VK_NO_PROTOTYPES
 #  define VK_NO_PROTOTYPES
 #endif
@@ -19,6 +17,24 @@ namespace axiom
         proj[1][1] = f;
         proj[3][2] = z_near; // Right, middle-bottom
         proj[2][3] = -1.f;  // Bottom, middle-right
+
+        /*
+
+        post-multiply
+
+        f/a  0  0  0
+          0  f  0  0
+          0  0  0 zn
+          0  0 -1  0
+
+        pre-multiply
+
+        f/a  0  0  0
+          0  f  0  0
+          0  0  0 -1
+          0  0 zn  0
+
+        */
 
         return proj;
     }
@@ -157,11 +173,11 @@ namespace axiom
             transform_buffer.Set<Mat4>({instance->transform}, i);
         }
 
-        vertex_shader = nova::Shader::Create(context, nova::ShaderStage::Vertex, "main",
-            nova::glsl::Compile( nova::ShaderStage::Vertex, "main", "src/renderers/rasterizer/axiom_Vertex.glsl", {}));
+        vertex_shader = nova::Shader::Create(context, nova::ShaderLang::Glsl,
+            nova::ShaderStage::Vertex, "main", "src/renderers/rasterizer/axiom_Vertex.glsl", {});
 
-        fragment_shader = nova::Shader::Create(context, nova::ShaderStage::Fragment, "main",
-            nova::glsl::Compile(nova::ShaderStage::Fragment, "main", "src/renderers/rasterizer/axiom_Fragment.glsl", {}));
+        fragment_shader = nova::Shader::Create(context, nova::ShaderLang::Glsl,
+            nova::ShaderStage::Fragment, "main", "src/renderers/rasterizer/axiom_Fragment.glsl", {});
     }
 
     void RasterRenderer::SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov)
