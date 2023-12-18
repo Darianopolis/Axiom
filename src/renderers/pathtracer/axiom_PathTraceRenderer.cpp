@@ -408,7 +408,7 @@ namespace axiom
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
         tlas_instance_buffer = nova::Buffer::Create(context,
-            scene->instances.size() * builder.GetInstanceSize(),
+            scene->instances.size() * builder.GetInstanceSize() + 16,
             nova::BufferUsage::AccelBuild,
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
@@ -429,7 +429,7 @@ namespace axiom
             }}, selected_instance_count);
 
             builder.WriteInstance(
-                tlas_instance_buffer.GetMapped(),
+                nova::AlignUpPower2(tlas_instance_buffer.GetMapped(), 16),
                 selected_instance_count,
                 data.blas,
                 instance->transform,
@@ -456,7 +456,8 @@ namespace axiom
 #endif // ----------------------------------------------------------------------
 
         {
-            builder.SetInstances(0, tlas_instance_buffer.GetAddress(), selected_instance_count);
+            // builder.SetInstances(0, tlas_instance_buffer.GetAddress(), selected_instance_count);
+            builder.SetInstances(0, nova::AlignUpPower2(tlas_instance_buffer.GetAddress(), 16), selected_instance_count);
             builder.Prepare(
                 nova::AccelerationStructureType::TopLevel,
                 nova::AccelerationStructureFlags::AllowDataAccess

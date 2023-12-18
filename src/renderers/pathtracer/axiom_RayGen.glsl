@@ -4,26 +4,26 @@
 
 layout(location = 0) rayPayloadEXT        RayPayload rayPayload;
 layout(location = 1) rayPayloadEXT        uint shadowRayPayload;
-layout(location = 0) hitObjectAttributeNV vec2             bary;
+//layout(location = 0) hitObjectAttributeNV vec2             bary;
 
-bool IsUnobstructed(vec3 origin, vec3 dir, float tMax)
-{
-    uint rayFlags = 0;
-    hitObjectNV hit;
-    hitObjectTraceRayNV(hit,
-        accelerationStructureEXT(pc.tlas),
-        rayFlags,
-        0xFF,
-        0,
-        1,
-        0,
-        origin,
-        0.0,
-        dir,
-        tMax,
-        1);
-    return !hitObjectIsHitNV(hit);
-}
+//bool IsUnobstructed(vec3 origin, vec3 dir, float tMax)
+//{
+//    uint rayFlags = 0;
+//    hitObjectNV hit;
+//    hitObjectTraceRayNV(hit,
+//        accelerationStructureEXT(pc.tlas),
+//        rayFlags,
+//        0xFF,
+//        0,
+//        1,
+//        0,
+//        origin,
+//        0.0,
+//        dir,
+//        tMax,
+//        1);
+//    return !hitObjectIsHitNV(hit);
+//}
 
 void main()
 {
@@ -38,6 +38,10 @@ void main()
         rnd.x = pc.noiseSeed[sx + 0].value + pc.noiseSeed[sy + 1].value;
         rnd.y = pc.noiseSeed[sx + 1].value + pc.noiseSeed[sy + 0].value;
     }
+
+    float focalPlaneDistance = 1;
+    float lensRadius = 0;
+//    float lensRadius = 0.05;
 
     // Write out location
 
@@ -54,13 +58,23 @@ void main()
     pixelCenter += pc.jitter * vec2(PixelSize);
     vec2 inUV = pixelCenter / (vec2(gl_LaunchSizeEXT.xy) * vec2(PixelSize));
     vec2 d = inUV * 2.0 - 1.0;
-    vec3 focalPoint = pc.camZOffset * cross(pc.camX, pc.camY);
+    vec3 camZ = cross(pc.camX, pc.camY);
+    vec3 camZScaled = pc.camZOffset * camZ;
     vec3 origin = pc.pos;
 
     // Perspective
     d.x *= float(gl_LaunchSizeEXT.x) / float(gl_LaunchSizeEXT.y);
     d.y *= -1.0;
-    vec3 dir = normalize((pc.camY * d.y) + (pc.camX * d.x) - focalPoint);
+    vec3 dir = normalize((pc.camY * d.y) + (pc.camX * d.x) - camZScaled);
+
+    if (lensRadius > 0) {
+        // Apply DoF
+        vec3 focalPoint = vec3(d.x / pc.camZOffset, d.y / pc.camZOffset, -1) * focalPlaneDistance;
+        vec3 lensSample = vec3(ConcentricSampleDisk() * lensRadius, 0);
+        mat3 tbn = mat3(pc.camX, pc.camY, camZ);
+        dir = normalize(tbn * normalize(focalPoint - lensSample));
+        origin += tbn * lensSample;
+    }
 
     // // Equirectangular
     // vec2 uv = d;
@@ -94,7 +108,7 @@ void main()
 
     for (uint i = 0; i < maxDepth; ++i) {
 
-        hitObjectNV hit;
+//        hitObjectNV hit;
 
         // Stochastically kill rays
 
@@ -114,7 +128,8 @@ void main()
 
         // Trace ray with kill mask
 
-        hitObjectTraceRayNV(hit,
+        rayPayload.isHit = false;
+        traceRayEXT(
             accelerationStructureEXT(pc.tlas),
             0,                         // Flags
             0xFF * (1 - int(killRay)), // Hit Mask
@@ -136,14 +151,15 @@ void main()
 
             hint |= CH_NumBits * int(killRay);
 
-            reorderThreadNV(hit, hint, CH_NumBits);
+//            reorderThreadNV(hit, hint, CH_NumBits);
 
             if (killRay) {
                 break;
             }
         }
 
-        if (!hitObjectIsHitNV(hit)) {
+//        if (!hitObjectIsHitNV(hit)) {
+        if (!rayPayload.isHit) {
 
             // Basic atmosphere
             color += throughput * atmosphere(
@@ -164,23 +180,22 @@ void main()
         } else {
 
             // Hit Attributes
-            int instanceID = hitObjectGetInstanceIdNV(hit);
-            int customInstanceID = hitObjectGetInstanceCustomIndexNV(hit);
-            int geometryIndex = hitObjectGetGeometryIndexNV(hit);
-            uint sbtIndex = hitObjectGetShaderBindingTableRecordIndexNV(hit);
-            uint hitKind = hitObjectGetHitKindNV(hit);
+            int instanceID = rayPayload.instanceID;
+            int customInstanceID = rayPayload.customInstanceID;
+            int geometryIndex = rayPayload.geometryIndex;
+            uint hitKind = rayPayload.hitKind;
             GeometryInfo geometry = pc.geometries[customInstanceID + geometryIndex];
 
             // Transforms
-            mat4x3 objToWorld = hitObjectGetObjectToWorldNV(hit);
+            mat4x3 objToWorld = rayPayload.objToWorld;
             mat3x3 tgtSpaceToWorld = transpose(inverse(mat3(objToWorld)));
 
             // Barycentric weights
-            hitObjectGetAttributesNV(hit, 0);
+            vec2 bary = rayPayload.bary;
             vec3 w = vec3(1.0 - bary.x - bary.y, bary.x, bary.y);
 
             // Indices
-            uint primID = hitObjectGetPrimitiveIndexNV(hit);
+            uint primID = rayPayload.primitiveID;
             uint i0 = geometry.indices[primID * 3 + 0].value;
             uint i1 = geometry.indices[primID * 3 + 1].value;
             uint i2 = geometry.indices[primID * 3 + 2].value;
@@ -205,7 +220,7 @@ void main()
             vec2 uv = uv0 * w.x + uv1 * w.y + uv2 * w.z;
 
             // Positions
-            hitObjectExecuteShaderNV(hit, 0);
+//            hitObjectExecuteShaderNV(hit, 0);
             vec3 v0w = objToWorld * vec4(rayPayload.position[0], 1);
             vec3 v1w = objToWorld * vec4(rayPayload.position[1], 1);
             vec3 v2w = objToWorld * vec4(rayPayload.position[2], 1);

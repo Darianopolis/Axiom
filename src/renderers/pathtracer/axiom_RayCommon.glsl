@@ -3,7 +3,7 @@
 
 #extension GL_EXT_ray_tracing                            : require
 #extension GL_EXT_ray_tracing_position_fetch             : require
-#extension GL_NV_shader_invocation_reorder               : require
+//#extension GL_NV_shader_invocation_reorder               : require
 
 layout(set = 0, binding = 0) uniform image2D RWImage2D[];
 
@@ -11,7 +11,15 @@ layout(set = 0, binding = 0) uniform texture2D Image2D[];
 layout(set = 0, binding = 0) uniform sampler Sampler[];
 
 struct RayPayload {
-    vec3 position[3];
+    vec3   position[3];
+    vec2   bary;
+    int    instanceID;
+    int    customInstanceID;
+    int    geometryIndex;
+    uint   hitKind;
+    mat4x3 objToWorld;
+    uint   primitiveID;
+    bool   isHit;
 };
 
 layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer ShadingAttributes {

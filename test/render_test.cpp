@@ -123,9 +123,8 @@ int main(int argc, char* argv[])
 // -----------------------------------------------------------------------------
 
     auto context = nova::Context::Create({
-        .debug = false,
+        .debug = true,
         .ray_tracing = true,
-        .compatibility = false,
     });
     auto queue = context.GetQueue(nova::QueueFlags::Graphics, 0);
     auto fence = nova::Fence::Create(context);
@@ -301,7 +300,6 @@ int main(int argc, char* argv[])
 
     NOVA_DEFER(&) { fence.Wait(); };
     while (app.IsRunning()) {
-        app.PollEvents();
         imgui.BeginFrame();
 
         fence.Wait();
@@ -412,5 +410,7 @@ int main(int argc, char* argv[])
         cmd.Present(swapchain);
         queue.Submit({cmd}, {fence}, {fence});
         queue.Present({swapchain}, {fence});
+
+        app.PollEvents();
     }
 }

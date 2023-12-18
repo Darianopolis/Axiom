@@ -5,7 +5,7 @@ namespace axiom
     void Engine::Init()
     {
         context = nova::Context::Create({
-            .debug = true,
+            .debug = false,
         });
 
         queue = context.GetQueue(nova::QueueFlags::Graphics, 0);
