@@ -3,7 +3,7 @@
 
 #extension GL_EXT_ray_tracing                            : require
 #extension GL_EXT_ray_tracing_position_fetch             : require
-//#extension GL_NV_shader_invocation_reorder               : require
+#extension GL_NV_shader_invocation_reorder               : require
 
 layout(set = 0, binding = 0) uniform image2D RWImage2D[];
 

@@ -5,6 +5,8 @@
 #include <stb_image.h>
 
 #include <base64.h>
+#include <nova/core/nova_Timer.hpp>
+#include <vulkan/vulkan_core.h>
 
 namespace axiom
 {
@@ -227,7 +229,7 @@ namespace axiom
             auto area = glm::length(0.5f * cross);
             auto normal = glm::normalize(cross);
 
-            if (area) {
+            if (std::abs(area) > 0.000001f) {
                 update_normal_tangent(v1i, normal, tangent, bitangent, area);
                 update_normal_tangent(v2i, normal, tangent, bitangent, area);
                 update_normal_tangent(v3i, normal, tangent, bitangent, area);
@@ -255,6 +257,10 @@ namespace axiom
                 f32(ts.oct_y) / 1023.f,
                 f32(ts.oct_s)
             ));
+
+            // auto decode_normal = tbn.normal;
+
+            // Compute tangent angle based on DECODED normal to match shader computation
 
             bool tgt_choice;
             auto enc_tangent = EncodeTangent(decode_normal, tbn.tangent, tgt_choice);

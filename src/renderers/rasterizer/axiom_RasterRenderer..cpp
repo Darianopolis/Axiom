@@ -68,7 +68,7 @@ namespace axiom
         RasterRenderer();
         ~RasterRenderer();
 
-        virtual void CompileScene(CompiledScene& scene, nova::CommandPool cmd_pool, nova::Fence fence);
+        virtual void CompileScene(CompiledScene& scene);
 
         virtual void SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov);
         virtual void Record(nova::CommandList cmd, nova::Image target);
@@ -102,11 +102,8 @@ namespace axiom
         depth_image.Destroy();
     }
 
-    void RasterRenderer::CompileScene(CompiledScene& _scene, nova::CommandPool cmd_pool, nova::Fence fence)
+    void RasterRenderer::CompileScene(CompiledScene& _scene)
     {
-        (void)cmd_pool;
-        (void)fence;
-
         scene = &_scene;
 
         u64 vertex_count = 0;
@@ -191,16 +188,16 @@ namespace axiom
 
     void RasterRenderer::Record(nova::CommandList cmd, nova::Image target)
     {
-        if (!depth_image || depth_image.GetExtent() != target.GetExtent()) {
+        if (!depth_image || depth_image.Extent() != target.Extent()) {
             depth_image.Destroy();
 
-            depth_image = nova::Image::Create(context, { Vec2U(target.GetExtent()), 0 },
+            depth_image = nova::Image::Create(context, { Vec2U(target.Extent()), 0 },
                 nova::ImageUsage::DepthStencilAttach,
                 nova::Format::D32_SFloat,
                 {});
         }
 
-        auto size = target.GetExtent();
+        auto size = target.Extent();
 
         cmd.ResetGraphicsState();
         cmd.SetBlendState({ true, false });
@@ -217,14 +214,18 @@ namespace axiom
             Mat4          view_proj;
         };
 
-        cmd.BeginRendering({{}, size}, {target}, depth_image);
+        cmd.BeginRendering({
+            .region = {{}, size},
+            .color_attachments = {target},
+            .depth_attachment = depth_image
+        });
         cmd.ClearColor(0, Vec4(Vec3(0.2f), 1.f), Vec2(size));
         cmd.ClearDepth(0.f, Vec2(size));
         cmd.BindIndexBuffer(index_buffer, nova::IndexType::U32);
         cmd.PushConstants(PushConstants {
-            .position_attributes = position_attribute_buffer.GetAddress(),
-            .shading_attributes = shading_attribute_buffer.GetAddress(),
-            .instances = transform_buffer.GetAddress(),
+            .position_attributes = position_attribute_buffer.DeviceAddress(),
+            .shading_attributes = shading_attribute_buffer.DeviceAddress(),
+            .instances = transform_buffer.DeviceAddress(),
             .view_proj = view_proj,
         });
         cmd.DrawIndexedIndirect(indirect_buffer, 0, indirect_count, sizeof(VkDrawIndexedIndirectCommand));

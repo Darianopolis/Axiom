@@ -2,7 +2,7 @@
 
 #include <scene/axiom_Scene.hpp>
 
-#include <fastgltf/parser.hpp>
+#include <fastgltf/core.hpp>
 
 namespace axiom
 {

@@ -29,7 +29,7 @@ namespace axiom
     public:
         virtual ~Renderer() = 0;
 
-        virtual void CompileScene(CompiledScene& scene, nova::CommandPool cmd_pool, nova::Fence fence) = 0;
+        virtual void CompileScene(CompiledScene& scene) = 0;
 
         virtual void ResetSamples() = 0;
         virtual void SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov) = 0;

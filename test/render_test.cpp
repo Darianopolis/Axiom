@@ -93,13 +93,19 @@ int main(int argc, char* argv[])
 
         axiom::scene_ir::Scene scene;
 
+        NOVA_LOG("Loading: {}", path.string());
+
         if (use_assimp) {
+            NOVA_LOG("Forcing assimp!");
             scene = assimp_importer.Import(path);
         } else if (ext == ".gltf" || ext == ".glb") {
+            NOVA_LOG("Detected gltf!");
             scene = gltf_importer.Import(path);
         } else if (ext == ".fbx") {
+            NOVA_LOG("Detected fbx");
             scene = fbx_importer.Import(path);
         } else {
+            NOVA_LOG("Unknown format, using assimp");
             scene = assimp_importer.Import(path);
         }
 
@@ -123,19 +129,15 @@ int main(int argc, char* argv[])
 // -----------------------------------------------------------------------------
 
     auto context = nova::Context::Create({
-        .debug = true,
+        .debug = false,
         .ray_tracing = true,
     });
-    auto queue = context.GetQueue(nova::QueueFlags::Graphics, 0);
-    auto fence = nova::Fence::Create(context);
-    auto cmd_pool = nova::CommandPool::Create(context, queue);
+    auto queue = context.Queue(nova::QueueFlags::Graphics, 0);
     auto sampler = nova::Sampler::Create(context, nova::Filter::Linear,
         nova::AddressMode::Repeat, nova::BorderColor::TransparentBlack, 0.f);
     NOVA_DEFER(&) {
-        fence.Wait();
-        cmd_pool.Destroy();
+        queue.WaitIdle();
         sampler.Destroy();
-        fence.Destroy();
         context.Destroy();
     };
 
@@ -150,7 +152,7 @@ int main(int argc, char* argv[])
     } else if (raster) {
         renderer = axiom::CreateRasterRenderer(context);
     }
-    renderer->CompileScene(compiled_scene, cmd_pool, fence);
+    renderer->CompileScene(compiled_scene);
 
 // -----------------------------------------------------------------------------
     NOVA_TIMEIT("compile-scene");
@@ -160,19 +162,19 @@ int main(int argc, char* argv[])
     auto app = nova::Application::Create();
     NOVA_DEFER(&) { app.Destroy(); };
 
-    auto window = nova::Window::Create(app, {
-        .title = "Axiom",
-        .size = { 1920, 1080 },
-    });
+    auto window = nova::Window::Create(app)
+        .SetTitle("Axiom")
+        .SetSize({ 1920, 1080 }, nova::WindowPart::Client)
+        .Show(true);
 
     auto swapchain = nova::Swapchain::Create(context,
-        window.GetNativeHandle(),
+        window.NativeHandle(),
         nova::ImageUsage::Storage
         | nova::ImageUsage::ColorAttach
         | nova::ImageUsage::TransferDst,
-        nova::PresentMode::Mailbox);
+        nova::PresentMode::Immediate);
     NOVA_DEFER(&) {
-        fence.Wait();
+        queue.WaitIdle();
         swapchain.Destroy();
     };
 
@@ -206,6 +208,7 @@ int main(int argc, char* argv[])
         .window = window,
         .context = context,
         .sampler = sampler,
+        .frames_in_flight = 1,
     });
 
 // -----------------------------------------------------------------------------
@@ -298,11 +301,11 @@ int main(int argc, char* argv[])
 
     */
 
-    NOVA_DEFER(&) { fence.Wait(); };
-    while (app.IsRunning()) {
+    NOVA_DEFER(&) { queue.WaitIdle(); };
+    while (app.ProcessEvents()) {
         imgui.BeginFrame();
 
-        fence.Wait();
+        queue.WaitIdle();
 
         // Time
 
@@ -342,7 +345,7 @@ int main(int argc, char* argv[])
 
         {
             Vec2 delta = {};
-            if (GetFocus() == (HWND)window.GetNativeHandle() && app.IsVirtualKeyDown(nova::VirtualKey::MouseSecondary)) {
+            if (GetFocus() == (HWND)window.NativeHandle() && app.IsVirtualKeyDown(nova::VirtualKey::MouseSecondary)) {
                 POINT p;
                 GetCursorPos(&p);
                 LONG dx = p.x - saved_pos.x;
@@ -372,15 +375,14 @@ int main(int argc, char* argv[])
 
         // Draw
 
-        cmd_pool.Reset();
-        auto cmd = cmd_pool.Begin();
+        auto cmd = queue.Begin();
 
-        queue.Acquire({swapchain}, {fence});
+        queue.Acquire({swapchain});
 
         renderer->SetCamera(position, rotation,
-            f32(swapchain.GetExtent().x) / f32(swapchain.GetExtent().y), glm::radians(90.f));
+            f32(swapchain.Extent().x) / f32(swapchain.Extent().y), glm::radians(90.f));
 
-        renderer->Record(cmd, swapchain.GetCurrent());
+        renderer->Record(cmd, swapchain.Target());
 
         // UI
 
@@ -405,12 +407,10 @@ int main(int argc, char* argv[])
         }
 
         imgui.EndFrame();
-        imgui.DrawFrame(cmd, swapchain.GetCurrent(), fence);
+        imgui.DrawFrame(cmd, swapchain.Target());
 
         cmd.Present(swapchain);
-        queue.Submit({cmd}, {fence}, {fence});
-        queue.Present({swapchain}, {fence});
-
-        app.PollEvents();
+        queue.Submit({cmd}, {});
+        queue.Present({swapchain}, {});
     }
 }

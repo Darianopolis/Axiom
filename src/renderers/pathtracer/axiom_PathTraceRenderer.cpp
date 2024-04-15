@@ -88,9 +88,9 @@ namespace axiom
         ~PathTraceRenderer();
 
         void Init();
-        void CompileMaterials(nova::CommandPool cmd_pool, nova::Fence fence);
+        void CompileMaterials();
 
-        virtual void CompileScene(CompiledScene& scene, nova::CommandPool cmd_pool, nova::Fence fence);
+        virtual void CompileScene(CompiledScene& scene);
 
         virtual void SetCamera(Vec3 position, Quat rotation, f32 aspect, f32 fov);
         virtual void Record(nova::CommandList cmd, nova::Image target);
@@ -151,10 +151,8 @@ namespace axiom
         accumulation_target.Destroy();
     }
 
-    void PathTraceRenderer::CompileMaterials(nova::CommandPool cmd_pool, nova::Fence fence)
+    void PathTraceRenderer::CompileMaterials()
     {
-        (void)cmd_pool, (void)fence;
-
         for (auto& texture : scene->textures) {
             loaded_textures.insert({ texture.Raw(), {} });
         }
@@ -173,7 +171,7 @@ namespace axiom
                     texture->format,
                     {});
 
-                loaded_texture.Set({}, loaded_texture.GetExtent(),
+                loaded_texture.Set({}, loaded_texture.Extent(),
                     texture->data.data());
 
                 total_resident_textures += texture->data.size();
@@ -190,15 +188,15 @@ namespace axiom
         for (u32 i = 0; i < scene->materials.size(); ++i) {
             auto& material = scene->materials[i];
 
-            u64 address = material_buffer.GetAddress() + (i * sizeof(GPU_Material));
+            u64 address = material_buffer.DeviceAddress() + (i * sizeof(GPU_Material));
             material_addresses[material.Raw()] = address;
 
             material_buffer.Set<GPU_Material>({{
-                .basecolor_alpha     = loaded_textures.at(material->basecolor_alpha.Raw()    ).GetDescriptor(),
-                .normals             = loaded_textures.at(material->normals.Raw()            ).GetDescriptor(),
-                .emissivity          = loaded_textures.at(material->emissivity.Raw()         ).GetDescriptor(),
-                .transmission        = loaded_textures.at(material->transmission.Raw()       ).GetDescriptor(),
-                .metalness_roughness = loaded_textures.at(material->metalness_roughness.Raw()).GetDescriptor(),
+                .basecolor_alpha     = loaded_textures.at(material->basecolor_alpha.Raw()    ).Descriptor(),
+                .normals             = loaded_textures.at(material->normals.Raw()            ).Descriptor(),
+                .emissivity          = loaded_textures.at(material->emissivity.Raw()         ).Descriptor(),
+                .transmission        = loaded_textures.at(material->transmission.Raw()       ).Descriptor(),
+                .metalness_roughness = loaded_textures.at(material->metalness_roughness.Raw()).Descriptor(),
 
                 .alpha_cutoff = material->alpha_cutoff,
                 .alpha_mask   = material->alpha_mask,
@@ -209,7 +207,7 @@ namespace axiom
         }
     }
 
-    void PathTraceRenderer::CompileScene(CompiledScene& _scene, nova::CommandPool cmd_pool, nova::Fence fence)
+    void PathTraceRenderer::CompileScene(CompiledScene& _scene)
     {
         scene = &_scene;
 
@@ -239,7 +237,7 @@ namespace axiom
 
         // Materials
 
-        CompileMaterials(cmd_pool, fence);
+        CompileMaterials();
 
         // Geometry
 
@@ -289,7 +287,7 @@ namespace axiom
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
         hit_groups = nova::Buffer::Create(context,
-            pipeline.GetTableSize(geometry_count),
+            pipeline.TableSize(geometry_count),
             nova::BufferUsage::ShaderBindingTable,
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
@@ -327,13 +325,13 @@ namespace axiom
                 for (u32 j = 0; j < mesh->sub_meshes.size(); ++j) {
                     auto& sub_mesh = mesh->sub_meshes[j];
 
-                    builder.SetTriangles(j,
-                        pos_attrib_buffer.GetAddress() +  sub_mesh.vertex_offset                  * sizeof(Vec3), nova::Format::RGBA32_SFloat, u32(sizeof(Vec3)), sub_mesh.max_vertex,
-                            index_buffer.GetAddress() + (sub_mesh.first_index + data.first_index) * sizeof(u32),  nova::IndexType::U32,                           sub_mesh.index_count / 3);
+                    builder.AddTriangles(j,
+                        pos_attrib_buffer.DeviceAddress() +  sub_mesh.vertex_offset                  * sizeof(Vec3), nova::Format::RGBA32_SFloat, u32(sizeof(Vec3)), sub_mesh.max_vertex,
+                            index_buffer.DeviceAddress() + (sub_mesh.first_index + data.first_index) * sizeof(u32),  nova::IndexType::U32,                           sub_mesh.index_count / 3);
                 }
 
-                scratch_size = std::max(scratch_size, builder.GetBuildScratchSize());
-                build_blas_size = std::max(build_blas_size, builder.GetBuildSize());
+                scratch_size = std::max(scratch_size, builder.BuildScratchSize());
+                build_blas_size = std::max(build_blas_size, builder.BuildSize());
             }
 
             // Create temporary scratch and build BLAS
@@ -362,15 +360,15 @@ namespace axiom
 
                     // Add geometry to build
 
-                    builder.SetTriangles(j,
-                        pos_attrib_buffer.GetAddress() +  sub_mesh.vertex_offset                   * sizeof(Vec3), nova::Format::RGBA32_SFloat, u32(sizeof(Vec3)), sub_mesh.max_vertex,
-                             index_buffer.GetAddress() + (sub_mesh.first_index + data.first_index) * sizeof(u32),  nova::IndexType::U32,                           sub_mesh.index_count / 3);
+                    builder.AddTriangles(j,
+                        pos_attrib_buffer.DeviceAddress() +  sub_mesh.vertex_offset                   * sizeof(Vec3), nova::Format::RGBA32_SFloat, u32(sizeof(Vec3)), sub_mesh.max_vertex,
+                             index_buffer.DeviceAddress() + (sub_mesh.first_index + data.first_index) * sizeof(u32),  nova::IndexType::U32,                           sub_mesh.index_count / 3);
 
                     // Store geometry offsets and material
 
                     geometry_info_buffer.Set<GPU_GeometryInfo>({{
-                        .shading_attributes = shading_attributes_buffer.GetAddress() + (data.vertex_offset + sub_mesh.vertex_offset) * sizeof(ShadingAttributes),
-                        .indices =                index_buffer.GetAddress() + (data.first_index   + sub_mesh.first_index  ) * sizeof(u32),
+                        .shading_attributes = shading_attributes_buffer.DeviceAddress() + (data.vertex_offset + sub_mesh.vertex_offset) * sizeof(ShadingAttributes),
+                        .indices =                index_buffer.DeviceAddress() + (data.first_index   + sub_mesh.first_index  ) * sizeof(u32),
                         .material = material_addresses.at(sub_mesh.material.Raw()),
                     }}, geometry_index);
 
@@ -381,24 +379,23 @@ namespace axiom
                             || sub_mesh.material->alpha_blend) {
                         sbt_index = SBT_AlphaMasked;
                     }
-                    pipeline.WriteHandle(hit_groups.GetMapped(), geometry_index, sbt_index);
+                    pipeline.WriteHandle(hit_groups.HostAddress(), geometry_index, sbt_index);
                 }
 
                 // Build
 
-                auto cmd = cmd_pool.Begin();
+                auto queue = context.Queue(nova::QueueFlags::Graphics, 0);
+                auto cmd = queue.Begin();
                 cmd.BuildAccelerationStructure(builder, build_blas, scratch);
-                context.GetQueue(nova::QueueFlags::Graphics, 0).Submit({cmd}, {}, {fence});
-                fence.Wait();
+                queue.Submit({cmd}, {}).Wait();
 
                 // Create final BLAS and compact
 
-                data.blas = nova::AccelerationStructure::Create(context, builder.GetCompactSize(),
+                data.blas = nova::AccelerationStructure::Create(context, builder.CompactSize(),
                     nova::AccelerationStructureType::BottomLevel);
-                cmd = cmd_pool.Begin();
+                cmd = queue.Begin();
                 cmd.CompactAccelerationStructure(data.blas, build_blas);
-                context.GetQueue(nova::QueueFlags::Graphics, 0).Submit({cmd}, {}, {fence});
-                fence.Wait();
+                queue.Submit({cmd}, {}).Wait();
             }
         }
 
@@ -408,7 +405,7 @@ namespace axiom
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
         tlas_instance_buffer = nova::Buffer::Create(context,
-            scene->instances.size() * builder.GetInstanceSize() + 16,
+            scene->instances.size() * builder.InstanceSize() + 16,
             nova::BufferUsage::AccelBuild,
             nova::BufferFlags::DeviceLocal | nova::BufferFlags::Mapped);
 
@@ -429,7 +426,7 @@ namespace axiom
             }}, selected_instance_count);
 
             builder.WriteInstance(
-                nova::AlignUpPower2(tlas_instance_buffer.GetMapped(), 16),
+                nova::AlignUpPower2(tlas_instance_buffer.HostAddress(), 16),
                 selected_instance_count,
                 data.blas,
                 instance->transform,
@@ -456,21 +453,21 @@ namespace axiom
 #endif // ----------------------------------------------------------------------
 
         {
-            // builder.SetInstances(0, tlas_instance_buffer.GetAddress(), selected_instance_count);
-            builder.SetInstances(0, nova::AlignUpPower2(tlas_instance_buffer.GetAddress(), 16), selected_instance_count);
+            // builder.AddInstances(0, tlas_instance_buffer.DeviceAddress(), selected_instance_count);
+            builder.AddInstances(0, nova::AlignUpPower2(tlas_instance_buffer.DeviceAddress(), 16), selected_instance_count);
             builder.Prepare(
                 nova::AccelerationStructureType::TopLevel,
                 nova::AccelerationStructureFlags::AllowDataAccess
                 | nova::AccelerationStructureFlags::PreferFastTrace, 1);
 
-            scratch.Resize(builder.GetBuildScratchSize());
+            scratch.Resize(builder.BuildScratchSize());
 
-            auto cmd = cmd_pool.Begin();
-            tlas = nova::AccelerationStructure::Create(context, builder.GetBuildSize(),
+            auto queue = context.Queue(nova::QueueFlags::Graphics, 0);
+            auto cmd = queue.Begin();
+            tlas = nova::AccelerationStructure::Create(context, builder.BuildSize(),
                 nova::AccelerationStructureType::TopLevel);
             cmd.BuildAccelerationStructure(builder, tlas, scratch);
-            context.GetQueue(nova::QueueFlags::Graphics, 0).Submit({cmd}, {}, {fence});
-            fence.Wait();
+            queue.Submit({cmd}, {}).Wait();
         }
     }
 
@@ -489,11 +486,11 @@ namespace axiom
 
     void PathTraceRenderer::Record(nova::CommandList cmd, nova::Image target)
     {
-        auto size = target.GetExtent();
+        auto size = target.Extent();
 
         // Resize backing buffers
 
-        if (!accumulation_target || accumulation_target.GetExtent() != size) {
+        if (!accumulation_target || accumulation_target.Extent() != size) {
             accumulation_target.Destroy();
 
             accumulation_target = nova::Image::Create(context, Vec3U(Vec2U(size), 0),
@@ -512,7 +509,7 @@ namespace axiom
             u32 noise_len = (size.x + size.y) * 2;
             noise_buffer.Resize(noise_len * sizeof(u32));
 
-            u32* noise = reinterpret_cast<u32*>(noise_buffer.GetMapped());
+            u32* noise = reinterpret_cast<u32*>(noise_buffer.HostAddress());
             for (u32 i = 0; i < noise_len; ++i) {
                 noise[i] = rng();
             }
@@ -549,17 +546,17 @@ namespace axiom
             : Vec2(dist(rng), dist(rng));
 
         cmd.PushConstants(PC_RayTrace {
-            .tlas = tlas.GetAddress(),
-            .geometries = geometry_info_buffer.GetAddress(),
-            .instances = instance_data_buffer.GetAddress(),
-            .noise_seed = noise_buffer.GetAddress(),
-            .target = accumulation_target.GetDescriptor(),
-            // .target = target.GetDescriptor(),
+            .tlas = tlas.DeviceAddress(),
+            .geometries = geometry_info_buffer.DeviceAddress(),
+            .instances = instance_data_buffer.DeviceAddress(),
+            .noise_seed = noise_buffer.DeviceAddress(),
+            .target = accumulation_target.Descriptor(),
+            // .target = target.Descriptor(),
             .pos = view_pos,
             .cam_x = view_rot * Vec3(1.f, 0.f, 0.f),
             .cam_y = view_rot * Vec3(0.f, 1.f, 0.f),
             .cam_z_offset = 1.f / glm::tan(0.5f * view_fov),
-            .linear_sampler = linear_sampler.GetDescriptor(),
+            .linear_sampler = linear_sampler.Descriptor(),
             .sample_count = sample_count,
             .jitter = jitter,
             .sample_radius = sample_radius,
@@ -567,7 +564,7 @@ namespace axiom
 
         sample_count++;
 
-        cmd.TraceRays(pipeline, Vec3U(Vec2U(target.GetExtent()) / Vec2U(sample_radius), 1), hit_groups.GetAddress(), 1);
+        cmd.TraceRays(pipeline, Vec3U(Vec2U(target.Extent()) / Vec2U(sample_radius), 1), hit_groups.DeviceAddress(), 1);
 
         // Post process
 
@@ -581,9 +578,9 @@ namespace axiom
         };
 
         cmd.PushConstants(PC_PostProcess {
-            .size = Vec2U(target.GetExtent()),
-            .source = accumulation_target.GetDescriptor(),
-            .target = target.GetDescriptor(),
+            .size = Vec2U(target.Extent()),
+            .source = accumulation_target.Descriptor(),
+            .target = target.Descriptor(),
             .exposure = exposure,
             .mode = u32(mode),
         });

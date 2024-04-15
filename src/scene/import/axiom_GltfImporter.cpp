@@ -2,7 +2,7 @@
 
 #include <nova/core/nova_Containers.hpp>
 
-#include <fastgltf/parser.hpp>
+#include <fastgltf/core.hpp>
 #include <fastgltf/glm_element_traits.hpp>
 
 namespace axiom
@@ -46,11 +46,7 @@ namespace axiom
             | fastgltf::Options::LoadGLBBuffers
             | fastgltf::Options::LoadExternalBuffers;
 
-        auto type = fastgltf::determineGltfFileType(&data);
-
-        auto res = type == fastgltf::GltfType::glTF
-            ? parser.loadGLTF(&data, dir, GltfOptions)
-            : parser.loadBinaryGLTF(&data, dir, GltfOptions);
+        auto res = parser.loadGltf(&data, dir, GltfOptions);
 
         if (!res) {
             NOVA_THROW("Error loading [{}] Message: {}", path.string(), fastgltf::getErrorMessage(res.error()));
@@ -125,15 +121,15 @@ namespace axiom
                     std::memcpy(source.data.data(), byte_view.bytes.data(), byte_view.bytes.size());
                     out_texture.data = std::move(source);
                 },
-                [&](fastgltf::sources::BufferView& buffer_view_idx) {
-                    auto& view = asset->bufferViews[buffer_view_idx.bufferViewIndex];
-                    auto& buffer = asset->buffers[view.bufferIndex];
-                    auto* bytes = fastgltf::DefaultBufferDataAdapter{}(buffer) + view.byteOffset;
-                    scene_ir::ImageFileBuffer source;
-                    source.data.resize(view.byteLength);
-                    std::memcpy(source.data.data(), bytes, view.byteLength);
-                    out_texture.data = std::move(source);
-                },
+                // [&](fastgltf::sources::BufferView& buffer_view_idx) {
+                //     auto& view = asset->bufferViews[buffer_view_idx.bufferViewIndex];
+                //     auto& buffer = asset->buffers[view.bufferIndex];
+                //     auto* bytes = fastgltf::DefaultBufferDataAdapter{}(buffer) + view.byteOffset;
+                //     scene_ir::ImageFileBuffer source;
+                //     source.data.resize(view.byteLength);
+                //     std::memcpy(source.data.data(), bytes, view.byteLength);
+                //     out_texture.data = std::move(source);
+                // },
                 [&](auto&) {
                     NOVA_THROW("Unknown image source: {}", image.data.index());
                 },
@@ -240,7 +236,7 @@ namespace axiom
         auto& node = asset->nodes[node_idx];
 
         Mat4 transform = Mat4(1.f);
-        if (auto trs = std::get_if<fastgltf::Node::TRS>(&node.transform)) {
+        if (auto trs = std::get_if<fastgltf::TRS>(&node.transform)) {
             auto translation = std::bit_cast<Vec3>(trs->translation);
             auto rotation = Quat(trs->rotation[3], trs->rotation[0], trs->rotation[1], trs->rotation[2]);
             auto scale = std::bit_cast<glm::vec3>(trs->scale);

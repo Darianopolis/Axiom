@@ -4,7 +4,7 @@
 
 #include "axiom_Attributes.hpp"
 
-#include <imp/imp_Importer.hpp>
+// #include <imp/imp_Importer.hpp>
 
 namespace axiom
 {
@@ -91,6 +91,6 @@ namespace axiom
             }
         }
 
-        void Compile(imp::Scene& scene);
+        // void Compile(imp::Scene& scene);
     };
 }

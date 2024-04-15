@@ -6,24 +6,24 @@ layout(location = 0) rayPayloadEXT        RayPayload rayPayload;
 layout(location = 1) rayPayloadEXT        uint shadowRayPayload;
 //layout(location = 0) hitObjectAttributeNV vec2             bary;
 
-//bool IsUnobstructed(vec3 origin, vec3 dir, float tMax)
-//{
-//    uint rayFlags = 0;
-//    hitObjectNV hit;
-//    hitObjectTraceRayNV(hit,
-//        accelerationStructureEXT(pc.tlas),
-//        rayFlags,
-//        0xFF,
-//        0,
-//        1,
-//        0,
-//        origin,
-//        0.0,
-//        dir,
-//        tMax,
-//        1);
-//    return !hitObjectIsHitNV(hit);
-//}
+bool IsUnobstructed(vec3 origin, vec3 dir, float tMax)
+{
+    uint rayFlags = 0;
+    hitObjectNV hit;
+    hitObjectTraceRayNV(hit,
+        accelerationStructureEXT(pc.tlas),
+        rayFlags,
+        0xFF,
+        0,
+        1,
+        0,
+        origin,
+        0.0,
+        dir,
+        tMax,
+        1);
+    return !hitObjectIsHitNV(hit);
+}
 
 void main()
 {
@@ -76,6 +76,15 @@ void main()
         origin += tbn * lensSample;
     }
 
+    // // Curved Monitor
+    // vec2 uv = d;
+    // float yaw = uv.x * radians(180) / 2.0;
+    // float x = sin(yaw);
+    // float y = d.y *= -1.0;
+    // float z = -cos(yaw);
+    // mat3 tbn = mat3(pc.camX, pc.camY, camZScaled);
+    // vec3 dir = normalize(tbn * normalize(vec3(x, y, z)));
+
     // // Equirectangular
     // vec2 uv = d;
     // float yaw = uv.x * PI;
@@ -83,7 +92,7 @@ void main()
     // float x = sin(yaw) * cos(pitch);
     // float y = -sin(pitch);
     // float z = -cos(yaw) * cos(pitch);
-    // mat3 tbn = mat3(pc.camX, pc.camY, focalPoint);
+    // mat3 tbn = mat3(pc.camX, pc.camY, focalcamZScaledPoint);
     // vec3 dir = tbn * vec3(x, y, z);
 
     // // Fisheye
@@ -93,12 +102,12 @@ void main()
     // vec2 xy = uv * vec2(1, -aspect);
     // float r = sqrt(dot(xy, xy));
     // vec2 cs = vec2 (cos(r * fov), sin(r * fov));
-    // mat3 tbn = mat3(pc.camX, pc.camY, -focalPoint);
+    // mat3 tbn = mat3(pc.camX, pc.camY, -camZScaled);
     // vec3 dir = tbn * vec3 (cs.y * xy / r, cs.x);
 
     vec3 color      = vec3(0.0);
     vec3 throughput = vec3(1.0);
-    uint maxDepth   = 10;
+    uint maxDepth   = 50;
 
     const vec3  SunDir       = normalize(vec3(2, 4, 1));
     // const vec3  SunDir       = normalize(vec3(-1, 1, -1));
@@ -291,18 +300,21 @@ void main()
 // -----------------------------------------------------------------------------
 //                          Debug writeout - Begin
 // -----------------------------------------------------------------------------
+// #define DEBUG_FACING
 // #define DEBUG_UV
 // #define DEBUG_FLAT_NRM
 // #define DEBUG_FLAT_TGT
 // #define DEBUG_VERT_NRM
 // #define DEBUG_NRM
-// #define DEBUG_TGT
+#define DEBUG_TGT
 // #define DEBUG_BARY
 // #define DEBUG_BASE
 // #define DEBUG_MRAO
 // #define DEBUG_EMIS
 // -----------------------------------------------------------------------------
-#if   defined(DEBUG_UV)
+#if   defined(DEBUG_FACING)
+            color = hitKind == gl_HitKindFrontFacingTriangleEXT ? vec3(0, 1, 0) : vec3(0, 0, 1);
+#elif defined(DEBUG_UV)
             color = vec3(mod(uv, 1.0), 0);
 #elif defined(DEBUG_FLAT_NRM)
             color = DebugSNorm(flatNrm);
@@ -338,7 +350,7 @@ void main()
             // Emissive term
             color += throughput * emissivity;
 
-            // if (false)
+            if (true)
             {
                 // BRDF
 
@@ -349,11 +361,11 @@ void main()
                 {
                     throughput /= pDiffuse;
 
-                    // vec3 sampleDir = RandomOnCone(SunDir, SunCosTheta);
-                    // if (IsUnobstructed(OffsetPointByNormal(pos, flatNrm), sampleDir, 8000000.0)) {
-                    //     color += throughput * SunIntensity *
-                    //         CookTorranceBrdf(nrm, -dir, sampleDir, baseColor, roughness, metalness, 1.5);
-                    // }
+//                     vec3 sampleDir = RandomOnCone(SunDir, SunCosTheta);
+//                     if (IsUnobstructed(OffsetPointByNormal(pos, flatNrm), sampleDir, 8000000.0)) {
+//                         color += throughput * SunIntensity *
+//                             CookTorranceBrdf(nrm, -dir, sampleDir, baseColor, roughness, metalness, 1.5);
+//                     }
 
                     // break;
 
@@ -429,11 +441,15 @@ void main()
                     // break;
                 }
             }
-            // else {
-            //     origin = OffsetPointByNormal(pos, flatNrm);
-            //     dir = reflect(dir, nrm);
-            //     throughput *= baseColor;
-            // }
+             else {
+                 origin = OffsetPointByNormal(pos, -flatNrm);
+//                 throughput *= baseColor;
+                 float alpha = 0.85;
+                 float src_factor = alpha;
+                 float dst_factor = 1 - alpha;
+                 color = color * src_factor + baseColor * dst_factor;
+                 throughput *= alpha;
+             }
         }
     }
 
