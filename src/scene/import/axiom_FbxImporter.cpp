@@ -27,7 +27,6 @@ namespace axiom
 
         ufbx_load_opts opts{};
         ufbx_error error;
-        NOVA_LOGEXPR(path.string());
         fbx = ufbx_load_file(path.string().c_str(), &opts, &error);
 
         scene.textures.resize(fbx->textures.count);
@@ -188,10 +187,32 @@ namespace axiom
             auto tv = fbx_tform.translation;
             auto tr = fbx_tform.rotation;
             auto ts = fbx_tform.scale;
+
             auto t = glm::translate(Mat4(1.f), Vec3(f32(tv.x), f32(tv.y), f32(tv.z)));
             auto r = glm::mat4_cast(Quat(f32(tr.w), f32(tr.x), f32(tr.y), f32(tr.z)));
             auto s = glm::scale(Mat4(1.f), Vec3(f32(ts.x), f32(ts.y), f32(ts.z)));
-            transform = t * r * s;
+
+            // transform = t * r * s;
+
+            // transform *= t;
+            // transform *= r;
+            // transform *= s;
+
+            // transform = t * transform;
+            // transform = r * transform;
+            // transform = s * transform;
+
+            // transform = s * transform;
+            // transform = r * transform;
+            // transform = t * transform;
+
+            // transform = glm::translate(transform, Vec3(f32(tv.x), f32(tv.y), f32(tv.z)));
+            // transform = r * transform;
+            // transform = glm::scale(transform, Vec3(f32(ts.x), f32(ts.y), f32(ts.z)));
+
+            transform = glm::translate(transform, Vec3(f32(tv.x), f32(tv.y), f32(tv.z)));
+            transform = transform * r;
+            transform = glm::scale(transform, Vec3(f32(ts.x), f32(ts.y), f32(ts.z)));
         }
         transform = parent_transform * transform;
 

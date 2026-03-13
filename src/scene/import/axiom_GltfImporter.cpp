@@ -1,6 +1,5 @@
 #include "axiom_GltfImporter.hpp"
-
-#include <nova/core/nova_Containers.hpp>
+#include <nova/core/nova_Files.hpp>
 
 #include <fastgltf/core.hpp>
 #include <fastgltf/glm_element_traits.hpp>
@@ -15,6 +14,8 @@ namespace axiom
 
     scene_ir::Scene GltfImporter::Import(const std::filesystem::path& path)
     {
+NOVA_TIMEIT_RESET();
+
         Reset();
         dir = path.parent_path();
 
@@ -37,16 +38,32 @@ namespace axiom
             | fastgltf::Extensions::KHR_materials_unlit
         };
 
-        fastgltf::GltfDataBuffer data;
-        data.loadFromFile(path);
+NOVA_TIMEIT("create parser");
+
+        auto data = fastgltf::GltfDataBuffer::FromPath(path);
+        if (data.error() != fastgltf::Error::None) {
+            NOVA_THROW("Error loading gltf data buffer [{}] Message: {}", path.string(), fastgltf::getErrorMessage(data.error()));
+        }
+
+        // auto bytes = nova::files::ReadBinaryFile(path.string().c_str());
+        // auto data = fastgltf::GltfDataBuffer::FromBytes((const std::byte*)bytes.data(), bytes.size());
+        // if (data.error() != fastgltf::Error::None) {
+        //     NOVA_THROW("Error loading gltf data buffer [{}] Message: {}", path.string(), fastgltf::getErrorMessage(data.error()));
+        // }
+
+NOVA_TIMEIT("load data buffer");
 
         constexpr auto GltfOptions =
               fastgltf::Options::DontRequireValidAssetMember
             | fastgltf::Options::AllowDouble
-            | fastgltf::Options::LoadGLBBuffers
-            | fastgltf::Options::LoadExternalBuffers;
+            | fastgltf::Options::LoadExternalBuffers
+            | fastgltf::Options::GenerateMeshIndices
+            | fastgltf::Options::DecomposeNodeMatrices
+            ;
 
-        auto res = parser.loadGltf(&data, dir, GltfOptions);
+        auto res = parser.loadGltf(data.get(), dir, GltfOptions);
+
+NOVA_TIMEIT("load full gltf");
 
         if (!res) {
             NOVA_THROW("Error loading [{}] Message: {}", path.string(), fastgltf::getErrorMessage(res.error()));
@@ -55,13 +72,15 @@ namespace axiom
         asset = std::make_unique<fastgltf::Asset>(std::move(res.get()));
 
         {
-            NOVA_LOG("Validating...");
+            nova::Log("Validating...");
             auto error = fastgltf::validate(*asset);
             if (error != fastgltf::Error::None) {
                 NOVA_THROW("Validation error loading [{}] - {}", path.string(), fastgltf::getErrorMessage(error));
             }
-            NOVA_LOG("passed validation...");
+            nova::Log("passed validation...");
         }
+
+NOVA_TIMEIT("validated");
 
         // Textures
 
@@ -121,15 +140,15 @@ namespace axiom
                     std::memcpy(source.data.data(), byte_view.bytes.data(), byte_view.bytes.size());
                     out_texture.data = std::move(source);
                 },
-                // [&](fastgltf::sources::BufferView& buffer_view_idx) {
-                //     auto& view = asset->bufferViews[buffer_view_idx.bufferViewIndex];
-                //     auto& buffer = asset->buffers[view.bufferIndex];
-                //     auto* bytes = fastgltf::DefaultBufferDataAdapter{}(buffer) + view.byteOffset;
-                //     scene_ir::ImageFileBuffer source;
-                //     source.data.resize(view.byteLength);
-                //     std::memcpy(source.data.data(), bytes, view.byteLength);
-                //     out_texture.data = std::move(source);
-                // },
+                [&](fastgltf::sources::BufferView& buffer_view_idx) {
+                    auto& view = asset->bufferViews[buffer_view_idx.bufferViewIndex];
+                    // auto& buffer = asset->buffers[view.bufferIndex];
+                    auto bytes = fastgltf::DefaultBufferDataAdapter{}(*asset, buffer_view_idx.bufferViewIndex);
+                    scene_ir::ImageFileBuffer source;
+                    source.data.resize(view.byteLength);
+                    std::memcpy(source.data.data(), bytes.data(), bytes.size_bytes());
+                    out_texture.data = std::move(source);
+                },
                 [&](auto&) {
                     NOVA_THROW("Unknown image source: {}", image.data.index());
                 },
@@ -143,6 +162,29 @@ namespace axiom
         }
     }
 
+    namespace {
+        Vec2 ToVec2(const fastgltf::math::nvec2& v) { return { v.x(), v.y() }; }
+        Vec3 ToVec3(const fastgltf::math::nvec3& v) { return { v.x(), v.y(), v.z() }; }
+        Vec4 ToVec4(const fastgltf::math::nvec4& v) { return { v.x(), v.y(), v.z(), v.w() }; }
+        Quat ToQuat(const fastgltf::math::fquat& v) {
+            Quat out;
+            out.x = v.x();
+            out.y = v.y();
+            out.z = v.z();
+            out.w = v.w();
+            return out;
+        }
+        Mat4 ToMat4(const fastgltf::math::fmat4x4& m)
+        {
+            return Mat4(
+                ToVec4(m.col(0)),
+                ToVec4(m.col(1)),
+                ToVec4(m.col(2)),
+                ToVec4(m.col(3))
+            );
+        }
+    }
+
     void GltfImporter::ProcessMaterial(u32 mat_idx)
     {
         auto& in_material = asset->materials[mat_idx];
@@ -153,14 +195,14 @@ namespace axiom
                 if (texture) out_material.properties.emplace_back(name, scene_ir::TextureSwizzle{ .texture_idx = u32(texture->textureIndex) }); },
             [&](std::string_view name, fastgltf::Optional<fastgltf::NormalTextureInfo>& texture) {
                 if (texture) out_material.properties.emplace_back(name, scene_ir::TextureSwizzle{ .texture_idx = u32(texture->textureIndex) }); },
-            [&](std::string_view name, nova::Span<f32> values) {
-                switch (values.size()) {
-                    break;case 1: out_material.properties.emplace_back(name, values[0]);
-                    break;case 2: out_material.properties.emplace_back(name, Vec2(values[0], values[1]));
-                    break;case 3: out_material.properties.emplace_back(name, Vec3(values[0], values[1], values[2]));
-                    break;case 4: out_material.properties.emplace_back(name, Vec4(values[0], values[1], values[2], values[3]));
-                    break;default: NOVA_THROW("Invalid number of values: {}", values.size());
-                }
+            [&](std::string_view name, fastgltf::math::nvec2 v) {
+                out_material.properties.emplace_back(name, ToVec2(v));
+            },
+            [&](std::string_view name, fastgltf::math::nvec3 v) {
+                out_material.properties.emplace_back(name, ToVec3(v));
+            },
+            [&](std::string_view name, fastgltf::math::nvec4 v) {
+                out_material.properties.emplace_back(name, ToVec4(v));
             },
             [&](std::string_view name, f32  scalar) { out_material.properties.emplace_back(name, scalar); },
             [&](std::string_view name, i32  scalar) { out_material.properties.emplace_back(name, scalar); },
@@ -212,20 +254,27 @@ namespace axiom
         fastgltf::copyFromAccessor<u32>(*asset, indices, out_mesh.indices.data());
 
         // Positions
-        auto& positions = asset->accessors[primitive.findAttribute("POSITION")->second];
+        auto& positions = asset->accessors[primitive.findAttribute("POSITION")->accessorIndex];
         out_mesh.positions.resize(positions.count);
         fastgltf::copyFromAccessor<Vec3>(*asset, positions, out_mesh.positions.data());
 
         // Normals
         if (auto normals = primitive.findAttribute("NORMAL"); normals != primitive.attributes.end()) {
-            auto& accessor = asset->accessors[normals->second];
+            auto& accessor = asset->accessors[normals->accessorIndex];
             out_mesh.normals.resize(accessor.count);
             fastgltf::copyFromAccessor<Vec3>(*asset, accessor, out_mesh.normals.data());
         }
 
+        // Tangents
+        // if (auto tangents = primitive.findAttribute("TANGENT"); tangents != primitive.attributes.end()) {
+        //     auto& accessor = asset->accessors[tangents->second];
+        //     out_mesh.tangents.resize(accessor.count);
+        //     fastgltf::copyFromAccessor<Vec4>(*asset, accessor, out_mesh.tangents.data());
+        // }
+
         // TexCoords (0)
         if (auto tex_coords = primitive.findAttribute("TEXCOORD_0"); tex_coords != primitive.attributes.end()) {
-            auto& accessor = asset->accessors[tex_coords->second];
+            auto& accessor = asset->accessors[tex_coords->accessorIndex];
             out_mesh.tex_coords.resize(accessor.count);
             fastgltf::copyFromAccessor<Vec2>(*asset, accessor, out_mesh.tex_coords.data());
         }
@@ -237,14 +286,33 @@ namespace axiom
 
         Mat4 transform = Mat4(1.f);
         if (auto trs = std::get_if<fastgltf::TRS>(&node.transform)) {
-            auto translation = std::bit_cast<Vec3>(trs->translation);
-            auto rotation = Quat(trs->rotation[3], trs->rotation[0], trs->rotation[1], trs->rotation[2]);
-            auto scale = std::bit_cast<glm::vec3>(trs->scale);
-            transform = glm::translate(Mat4(1.f), translation)
-                * glm::mat4_cast(rotation)
-                * glm::scale(Mat4(1.f), scale);
-        } else if (auto m = std::get_if<fastgltf::Node::TransformMatrix>(&node.transform)) {
-            transform = std::bit_cast<Mat4>(*m);
+            auto translation = ToVec3(trs->translation);
+            auto rotation = ToQuat(trs->rotation);
+            auto scale = ToVec3(trs->scale);
+            // transform = glm::translate(Mat4(1.f), translation)
+            //     * glm::mat4_cast(rotation)
+            //     * glm::scale(Mat4(1.f), scale);
+
+            transform = glm::mat4(1.f);
+
+            // transform *= glm::translate(Mat4(1.f), translation);
+            // transform *= glm::mat4_cast(rotation);
+            // transform *= glm::scale(Mat4(1.f), scale);
+
+            // transform = transform * glm::translate(Mat4(1.f), translation);
+            // transform = transform * glm::mat4_cast(rotation);
+            // transform = transform * glm::scale(Mat4(1.f), scale);
+
+            // transform = glm::translate(Mat4(1.f), translation) * transform;
+            // transform = glm::mat4_cast(rotation) * transform;
+            // transform = glm::scale(Mat4(1.f), scale) * transform;
+
+            transform = glm::translate(transform, translation);
+            transform = transform * glm::mat4_cast(rotation);
+            transform = glm::scale(transform, scale);
+
+        } else if (auto m = std::get_if<fastgltf::math::fmat4x4>(&node.transform)) {
+            transform = ToMat4(*m);
         }
 
         transform = parent_transform * transform;

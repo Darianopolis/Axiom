@@ -141,7 +141,6 @@ float LuminanceRGB(vec3 rgb)
     return 0.3 * rgb.r + 0.6 * rgb.g + 0.1 * rgb.b;
 }
 
-
 uvec2 rnd;
 
 float RandomUNorm()

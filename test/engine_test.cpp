@@ -156,8 +156,8 @@
 
 //         engine.Run();
 //     } catch (std::exception& e) {
-//         NOVA_LOG("Error: {}", e.what());
+//         nova::Log("Error: {}", e.what());
 //     } catch (...) {
-//         NOVA_LOG("Error");
+//         nova::Log("Error");
 //     }
 // }

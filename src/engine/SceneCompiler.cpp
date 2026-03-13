@@ -41,7 +41,7 @@
 //                     path.replace_extension(".png");
 //                 }
 //                 if (!std::filesystem::exists(path)) {
-//                     NOVA_LOG("Cannot find file: {}", path.string());
+//                     nova::Log("Cannot find file: {}", path.string());
 //                     continue;
 //                 }
 //                 path = std::filesystem::canonical(path);
@@ -111,7 +111,7 @@
 //                     return texture->textureIdx;
 //                 }
 
-//                 // NOVA_LOG("Using fallback!");
+//                 // nova::Log("Using fallback!");
 
 //                 Vec4 data;
 

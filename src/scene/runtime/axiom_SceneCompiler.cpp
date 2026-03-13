@@ -42,7 +42,7 @@ namespace axiom
                     path.replace_extension(".png");
                 }
                 if (!std::filesystem::exists(path)) {
-                    NOVA_LOG("Cannot find file: {}", path.string());
+                    nova::Log("Cannot find file: {}", path.string());
                     continue;
                 }
                 path = std::filesystem::canonical(path);
@@ -111,10 +111,13 @@ namespace axiom
                             total_base_color++;
                         }
                         return tex;
+                    } else {
+                        nova::Log("Texture didn't load correctly, using fallback");
+                        return fallback;
                     }
                 }
 
-                // NOVA_LOG("Using fallback!");
+                // nova::Log("Using fallback!");
 
                 Vec4 data;
 
@@ -165,7 +168,7 @@ namespace axiom
                 out_material->basecolor_alpha->min_alpha < out_material->alpha_cutoff;
         }
 
-        NOVA_LOGEXPR(total_base_color);
+        nova::Log(NOVA_FMTEXPR(total_base_color));
 
         u64 total_tangent_spaces = 0;
         ankerl::unordered_dense::set<u64> unique_tangent_space;
@@ -190,6 +193,9 @@ namespace axiom
                 { &out_mesh->position_attributes[0], sizeof(out_mesh->position_attributes[0]), vertex_count },
                 !in_mesh.normals.empty()
                     ? InStridedRegion{ &in_mesh.normals[0], sizeof(in_mesh.normals[0]), vertex_count }
+                    : InStridedRegion{},
+                !in_mesh.tangents.empty()
+                    ? InStridedRegion{ &in_mesh.tangents[0], sizeof(in_mesh.tangents[0]), vertex_count }
                     : InStridedRegion{},
                 !in_mesh.tex_coords.empty()
                     ? InStridedRegion{ &in_mesh.tex_coords[0], sizeof(in_mesh.tex_coords[0]), vertex_count }
@@ -217,7 +223,7 @@ namespace axiom
             });
         }
 
-        NOVA_LOG("Unique shading attributes: {} / {} ({:.2f}%)", unique_tangent_space.size(), total_tangent_spaces, (100.0 * unique_tangent_space.size()) / total_tangent_spaces);
+        nova::Log("Unique shading attributes: {} / {} ({:.2f}%)", unique_tangent_space.size(), total_tangent_spaces, (100.0 * unique_tangent_space.size()) / total_tangent_spaces);
 
         for (auto& in_instance : in_scene.instances) {
             auto out_instance = Ref<TriMeshInstance>::Create();

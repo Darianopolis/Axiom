@@ -2,8 +2,6 @@
 
 #include <scene/axiom_Scene.hpp>
 
-#include <nova/core/nova_Containers.hpp>
-
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 

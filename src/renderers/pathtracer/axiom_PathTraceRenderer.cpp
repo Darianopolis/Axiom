@@ -1,8 +1,5 @@
 #include "axiom_Renderer.hpp"
 
-#include <nova/core/nova_ToString.hpp>
-#include <nova/core/nova_Guards.hpp>
-
 #include <rdo_bc_encoder.h>
 
 namespace axiom
@@ -17,11 +14,11 @@ namespace axiom
 
     struct GPU_Material
     {
-        u32     basecolor_alpha;
-        u32             normals;
-        u32          emissivity;
-        u32        transmission;
-        u32 metalness_roughness;
+        nova::ImageDescriptor     basecolor_alpha;
+        nova::ImageDescriptor             normals;
+        nova::ImageDescriptor          emissivity;
+        nova::ImageDescriptor        transmission;
+        nova::ImageDescriptor metalness_roughness;
 
         f32 alpha_cutoff = 0.5f;
         bool  alpha_mask = false;
@@ -178,7 +175,7 @@ namespace axiom
             }
         }
 
-        NOVA_LOG("Total image memory resident: {}", nova::ByteSizeToString(total_resident_textures));
+        nova::Log("Total image memory resident: {}", nova::ByteSizeToString(total_resident_textures));
 
         material_buffer = nova::Buffer::Create(context,
             scene->materials.size() * sizeof(GPU_Material),
@@ -251,7 +248,7 @@ namespace axiom
         }
 
 #ifdef AXIOM_TRACE_COMPILE // --------------------------------------------------
-        NOVA_LOG("Compiling, unique vertices = {}, unique indices = {}", vertex_count, index_count);
+        nova::Log("Compiling, unique vertices = {}, unique indices = {}", vertex_count, index_count);
 #endif // ----------------------------------------------------------------------
 
         shading_attributes_buffer = nova::Buffer::Create(context,
@@ -268,7 +265,7 @@ namespace axiom
 
         u64 vertex_offset = 0;
         u64 index_offset = 0;
-        NOVA_LOGEXPR(scene->meshes.size());
+        nova::Log(NOVA_FMTEXPR(scene->meshes.size()));
         for (auto& mesh : scene->meshes) {
             mesh_data[mesh.Raw()] = CompiledMesh{ i32(vertex_offset), u32(index_offset), geometry_count };
 
@@ -429,6 +426,7 @@ namespace axiom
                 nova::AlignUpPower2(tlas_instance_buffer.HostAddress(), 16),
                 selected_instance_count,
                 data.blas,
+                // glm::rotate(glm::radians(90.f), Vec3(-1.f, 0.f, 0.f)) *
                 instance->transform,
                 data.geometry_offset,
                 0xFF,
@@ -443,13 +441,13 @@ namespace axiom
         }
 
 #ifdef AXIOM_TRACE_COMPILE // --------------------------------------------------
-        NOVA_LOG("Compiling scene:");
-        NOVA_LOG("  vertices   = {}", vertex_count);
-        NOVA_LOG("  indices    = {}", index_count);
-        NOVA_LOG("  meshes     = {}", scene->meshes.size());
-        NOVA_LOG("  geometries = {}", geometry_count);
-        NOVA_LOG("  instances  = {}", scene->instances.size());
-        NOVA_LOG("  triangles  = {}", instanced_index_count / 3);
+        nova::Log("Compiling scene:");
+        nova::Log("  vertices   = {}", vertex_count);
+        nova::Log("  indices    = {}", index_count);
+        nova::Log("  meshes     = {}", scene->meshes.size());
+        nova::Log("  geometries = {}", geometry_count);
+        nova::Log("  instances  = {}", scene->instances.size());
+        nova::Log("  triangles  = {}", instanced_index_count / 3);
 #endif // ----------------------------------------------------------------------
 
         {
@@ -458,7 +456,8 @@ namespace axiom
             builder.Prepare(
                 nova::AccelerationStructureType::TopLevel,
                 nova::AccelerationStructureFlags::AllowDataAccess
-                | nova::AccelerationStructureFlags::PreferFastTrace, 1);
+                | nova::AccelerationStructureFlags::PreferFastTrace
+                | nova::AccelerationStructureFlags::AllowCompaction, 1);
 
             scratch.Resize(builder.BuildScratchSize());
 
@@ -468,6 +467,15 @@ namespace axiom
                 nova::AccelerationStructureType::TopLevel);
             cmd.BuildAccelerationStructure(builder, tlas, scratch);
             queue.Submit({cmd}, {}).Wait();
+
+            // Compact
+
+            nova::Log("Compacting from {} to {}", nova::ByteSizeToString(builder.BuildSize()), nova::ByteSizeToString(builder.CompactSize()));
+            auto compact_tlas = nova::AccelerationStructure::Create(context, builder.CompactSize(), nova::AccelerationStructureType::TopLevel);
+            cmd = queue.Begin();
+            cmd.CompactAccelerationStructure(compact_tlas, tlas);
+            queue.Submit({cmd}, {}).Wait();
+
         }
     }
 
@@ -524,14 +532,14 @@ namespace axiom
             u64   instances;
             u64  noise_seed;
 
-            u32 target;
+            nova::ImageDescriptor target;
 
             Vec3         pos;
             Vec3       cam_x;
             Vec3       cam_y;
             f32 cam_z_offset;
 
-            u32 linear_sampler;
+            nova::SamplerDescriptor linear_sampler;
 
             u32 sample_count;
 
@@ -551,7 +559,6 @@ namespace axiom
             .instances = instance_data_buffer.DeviceAddress(),
             .noise_seed = noise_buffer.DeviceAddress(),
             .target = accumulation_target.Descriptor(),
-            // .target = target.Descriptor(),
             .pos = view_pos,
             .cam_x = view_rot * Vec3(1.f, 0.f, 0.f),
             .cam_y = view_rot * Vec3(0.f, 1.f, 0.f),
@@ -570,11 +577,11 @@ namespace axiom
 
         struct PC_PostProcess
         {
-            Vec2U   size;
-            u32   source;
-            u32   target;
-            f32 exposure;
-            u32     mode;
+            Vec2U                   size;
+            nova::ImageDescriptor source;
+            nova::ImageDescriptor target;
+            f32                 exposure;
+            u32                     mode;
         };
 
         cmd.PushConstants(PC_PostProcess {
@@ -593,6 +600,8 @@ namespace axiom
         cmd.BindShaders({ postprocess_shader });
         cmd.Barrier(nova::PipelineStage::RayTracing, nova::PipelineStage::Compute);
         cmd.Dispatch(Vec3U((Vec2U(size) + Vec2U(15)) / Vec2U(16), 1));
+
+        cmd.Barrier(nova::PipelineStage::Compute, nova::PipelineStage::Graphics);
     }
 
     void PathTraceRenderer::ResetSamples()

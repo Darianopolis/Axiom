@@ -93,6 +93,7 @@ namespace axiom
         {
             std::vector<Vec3>  positions;
             std::vector<Vec3>    normals;
+            std::vector<Vec4>   tangents;
             std::vector<Vec2> tex_coords;
             std::vector<u32>     indices;
             u32             material_idx = InvalidIndex;

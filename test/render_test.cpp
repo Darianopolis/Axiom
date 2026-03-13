@@ -8,13 +8,10 @@
 
 #include <nova/rhi/nova_RHI.hpp>
 
-#include <nova/core/nova_Timer.hpp>
-#include <nova/core/nova_Guards.hpp>
-#include <nova/core/nova_ToString.hpp>
 #include <nova/ui/nova_ImGui.hpp>
 
 #include <nova/window/nova_Window.hpp>
-#include <nova/core/win32/nova_Win32Include.hpp>
+#include <nova/core/win32/nova_Win32.hpp>
 
 using namespace nova::types;
 
@@ -56,31 +53,31 @@ int main(int argc, char* argv[])
             try {
                 auto path = std::filesystem::path(arg);
                 if (!std::filesystem::exists(path)) {
-                    NOVA_LOG("Argument: [{}] not a valid option or file does not exist", arg);
+                    nova::Log("Argument: [{}] not a valid option or file does not exist", arg);
                     return 1;
                 }
                 paths.emplace_back(std::move(path));
             } catch (...) {
-                NOVA_LOG("Argument: [{}] not a valid option", arg);
+                nova::Log("Argument: [{}] not a valid option", arg);
                 return 1;
             }
         }
     }
 
     if (paths.empty()) {
-        NOVA_LOG("No file path provided");
+        nova::Log("No file path provided");
         return 1;
     }
 
     if (!(path_trace | raster)) {
-        NOVA_LOG("No render mode selected, defaulting to path tracing");
+        nova::Log("No render mode selected, defaulting to path tracing");
         path_trace = true;
     }
 
 // -----------------------------------------------------------------------------
-    NOVA_LOG("Loading models:");
+    nova::Log("Loading models:");
     for (auto& path : paths) {
-        NOVA_LOG(" - {}", path.string());
+        nova::Log(" - {}", path.string());
     }
     NOVA_TIMEIT_RESET();
 // -----------------------------------------------------------------------------
@@ -93,24 +90,25 @@ int main(int argc, char* argv[])
 
         axiom::scene_ir::Scene scene;
 
-        NOVA_LOG("Loading: {}", path.string());
+        nova::Log("Loading: {}", path.string());
 
         if (use_assimp) {
-            NOVA_LOG("Forcing assimp!");
+            nova::Log("Forcing assimp!");
             scene = assimp_importer.Import(path);
         } else if (ext == ".gltf" || ext == ".glb") {
-            NOVA_LOG("Detected gltf!");
+            nova::Log("Detected gltf!");
             scene = gltf_importer.Import(path);
         } else if (ext == ".fbx") {
-            NOVA_LOG("Detected fbx");
+            nova::Log("Detected fbx");
             scene = fbx_importer.Import(path);
         } else {
-            NOVA_LOG("Unknown format, using assimp");
+            nova::Log("Unknown format, using assimp");
             scene = assimp_importer.Import(path);
         }
 
         // scene.Debug();
         compiler.Compile(scene, compiled_scene);
+        // compiled_scene.DebugDump();
     }
 
     // {
@@ -123,9 +121,197 @@ int main(int argc, char* argv[])
     //     compiled_scene.Compile(scene);
     // }
 
+    // {
+    //     axiom::scene_ir::Scene scene;
+    //     struct Vertex {
+    //         Vec3 position;
+    //         Vec3 normal;
+    //         Vec2 texCoord;
+    //     };
+
+    //     std::vector<Vertex> vertices;
+    //     std::vector<u32> indices;
+
+    //     {
+    //         // Base case
+
+    //         constexpr f32 X = 0.525731112119133606f;
+    //         constexpr f32 Z = 0.850650808352039932f;
+    //         constexpr f32 N = 0.f;
+
+    //         vertices = {
+    //             {{-X,N,Z}}, {{ X,N, Z}}, {{-X, N,-Z}}, {{X, N,-Z}},
+    //             {{ N,Z,X}}, {{ N,Z,-X}}, {{ N,-Z,X}}, {{ N,-Z,-X}},
+    //             {{ Z,X,N}}, {{-Z,X, N}}, {{ Z,-X,N}}, {{-Z,-X, N}}
+    //         };
+
+    //         for (auto& v : vertices)
+    //         {
+    //             v.position = glm::normalize(v.position);
+    //             v.normal = v.position;
+    //         }
+
+    //         indices = {
+    //             0,  4,  1, 0, 9,  4, 9,  5, 4,  4, 5, 8, 4, 8,  1,
+    //             8, 10,  1, 8, 3, 10, 5,  3, 8,  5, 2, 3, 2, 7,  3,
+    //             7, 10,  3, 7, 6, 10, 7, 11, 6, 11, 0, 6, 0, 1,  6,
+    //             6,  1, 10, 9, 0, 11, 9, 11, 2,  9, 2, 5, 7, 2, 11,
+    //         };
+    //     }
+
+    //     using Lookup = ankerl::unordered_dense::map<u64, u32>;
+    //     auto vertexForEdge = [&](Lookup& lookup, std::vector<Vertex>& vertices,  u32 first, u32 second) {
+    //         u64 key = first < second
+    //             ? u64(first) << 32 | second
+    //             : u64(second) << 32 | first;
+
+    //         auto inserted = lookup.insert({ key, u32(vertices.size()) });
+    //         if (inserted.second)
+    //         {
+    //             auto& edge0 = vertices[first].position;
+    //             auto& edge1 = vertices[second].position;
+    //             auto point = glm::normalize(edge0 + edge1);
+    //             vertices.push_back(Vertex{.position = point, .normal = point});
+    //         }
+
+    //         return inserted.first->second;
+    //     };
+
+    //     constexpr u32 SubDivisions = 7;
+    //     for (u32 i = 0; i < SubDivisions; ++i)
+    //     {
+    //         Lookup lookup;
+    //         std::vector<u32> result;
+
+    //         for (u32 j = 0; j < indices.size(); j += 3)
+    //         {
+    //             std::array<u32, 3> vi = { indices[j + 0], indices[j + 1], indices[j + 2] };
+
+    //             std::array<u32, 3> mid;
+    //             for (u32 edge = 0; edge < 3; ++edge)
+    //             {
+    //                 mid[edge] = vertexForEdge(lookup, vertices, vi[edge], vi[(edge + 1)%3]);
+    //             }
+
+    //             result.push_back(vi[0]);
+    //             result.push_back(mid[0]);
+    //             result.push_back(mid[2]);
+
+    //             result.push_back(vi[1]);
+    //             result.push_back(mid[1]);
+    //             result.push_back(mid[0]);
+
+    //             result.push_back(vi[2]);
+    //             result.push_back(mid[2]);
+    //             result.push_back(mid[1]);
+
+    //             result.push_back(mid[0]);
+    //             result.push_back(mid[1]);
+    //             result.push_back(mid[2]);
+    //         }
+
+    //         indices = std::move(result);
+    //         nova::Log("Subdivision level: {}, triangles = {}", i + 1, indices.size() / 3);
+    //     }
+
+    //     for (auto& v : vertices)
+    //     {
+    //         // v.texCoord = Vec2(
+    //         //     (glm::atan(v.position.z, v.position.x) / (2.f * glm::pi<f32>())) + 0.5f,
+    //         //     (glm::asin(v.position.y) / glm::pi<f32>())) + 0.5f;
+
+    //         v.texCoord = Vec2(
+    //             1.f - ((glm::atan(v.position.z, v.position.x) / (2.f * glm::pi<f32>())) + 0.5f),
+    //             1.f - ((glm::asin(v.position.y) / glm::pi<f32>()) + 0.5f));
+    //     }
+
+    //     for (u32 idx = 0; idx < indices.size(); idx += 3) {
+    //         auto v0 = vertices[indices[idx + 0]];
+    //         auto v1 = vertices[indices[idx + 1]];
+    //         auto v2 = vertices[indices[idx + 2]];
+
+    //         auto wrapVertex = [&](u32 local_idx) {
+    //             auto new_idx = u32(vertices.size());
+    //             auto& v = vertices.emplace_back(vertices[indices[idx + local_idx]]);
+    //             v.texCoord.x += 1.f;
+    //             switch (local_idx) {
+    //                 break;case 0: v0 = v;
+    //                 break;case 1: v1 = v;
+    //                 break;case 2: v2 = v;
+    //             }
+    //             indices[idx + local_idx] = new_idx;
+    //         };
+
+    //         float tolerance = 0.9f;
+    //         if (std::abs(v1.texCoord.x - v0.texCoord.x) > tolerance) wrapVertex(v1.texCoord.x > v0.texCoord.x ? 0 : 1);
+    //         if (std::abs(v2.texCoord.x - v0.texCoord.x) > tolerance) wrapVertex(v2.texCoord.x > v0.texCoord.x ? 0 : 2);
+    //         if (std::abs(v2.texCoord.x - v1.texCoord.x) > tolerance) wrapVertex(v2.texCoord.x > v1.texCoord.x ? 1 : 2);
+
+    //         // auto fixVertex = [&](u32 local_idx, f32 new_u) {
+    //         //     auto new_idx = u32(vertices.size());
+    //         //     auto& v = vertices.emplace_back();
+    //         //     auto& old_v = vertices[indices[idx + local_idx]];
+    //         //     v.position = old_v.position;
+    //         //     v.normal = old_v.normal;
+    //         //     v.texCoord = old_v.texCoord;
+    //         //     v.texCoord.x = new_u;
+    //         //     switch (local_idx) {
+    //         //         break;case 0: v0 = v;
+    //         //         break;case 1: v1 = v;
+    //         //         break;case 2: v2 = v;
+    //         //     }
+    //         //     indices[idx + local_idx] = new_idx;
+    //         // };
+
+    //         // float ax = v0.texCoord.x;
+    //         // float bx = v1.texCoord.x;
+    //         // float cx = v2.texCoord.x;
+    //         // float ay = v0.texCoord.y;
+    //         // float by = v1.texCoord.y;
+    //         // float cy = v2.texCoord.y;
+
+    //         // u32 a = 0, b = 1, c = 2;
+
+    //         // auto Eq = [](float a, float b) -> bool { return std::abs(a - b) < 0.001f; };
+
+    //         // if (bx - ax >= 0.5f && !Eq(ay, 1.f)) fixVertex(b, bx - 1.f);
+    //         // if (cx - bx > 0.5f) fixVertex(c, cx - 1.f);
+    //         // if ((ax > 0.5f && ax - cx > 0.5f) || (Eq(ax, 1.f) && Eq(cy, 0.f))) fixVertex(a, ax - 1.f);
+    //         // if (bx > 0.5f && bx - ax > 0.5f) fixVertex(b, bx - 1.f);
+    //         // if (Eq(ay, 0.f) || Eq(ay, 1.f)) fixVertex(a, (bx + cx) / 2.f);
+    //         // if (Eq(by, 0.f) || Eq(by, 1.f)) fixVertex(b, (ax + cx) / 2.f);
+    //         // if (Eq(cy, 0.f) || Eq(cy, 1.f)) fixVertex(c, (ax + bx) / 2.f);
+    //     }
+
+    //     auto& mesh = scene.meshes.emplace_back();
+    //     for (auto& v : vertices) {
+    //         mesh.positions.push_back(v.position);
+    //         mesh.normals.push_back(v.normal);
+    //         mesh.tex_coords.push_back(v.texCoord);
+    //     }
+    //     mesh.indices = std::move(indices);
+    //     mesh.material_idx = 0;
+
+    //     auto& texture = scene.textures.emplace_back();
+    //     // texture.data = axiom::scene_ir::ImageFileURI("C:/Users/Darian/Downloads/equirectangular_projection.jpg");
+    //     // texture.data = axiom::scene_ir::ImageFileURI("C:/Users/Darian/Downloads/testimage.jpg");
+    //     texture.data = axiom::scene_ir::ImageFileURI("C:/Users/Darian/Downloads/HDR_041_Path/HDR_041_Path.hdr");
+    //     // texture.data = axiom::scene_ir::ImageBuffer{ {255, 0, 0, 255}, {1, 1}, axiom::scene_ir::BufferFormat::RGBA8 };
+
+    //     auto& material = scene.materials.emplace_back();
+    //     // material.properties.emplace_back(axiom::scene_ir::property::BaseColor, Vec4(1.f, 0.f, 0.f, 1.f));
+    //     material.properties.emplace_back(axiom::scene_ir::property::BaseColor, axiom::scene_ir::TextureSwizzle{0, { 0, 1, 2, 3 }});
+
+    //     auto& instance = scene.instances.emplace_back();
+    //     instance.mesh_idx = 0;
+    //     instance.transform = Mat4(1.f);
+
+    //     compiler.Compile(scene, compiled_scene);
+    // }
+
 // -----------------------------------------------------------------------------
     NOVA_TIMEIT("load-scene");
-    NOVA_LOG("Initializing nova::rhi");
+    nova::Log("Initializing nova::rhi");
 // -----------------------------------------------------------------------------
 
     auto context = nova::Context::Create({
@@ -143,7 +329,7 @@ int main(int argc, char* argv[])
 
 // -----------------------------------------------------------------------------
     NOVA_TIMEIT("init-vulkan");
-    NOVA_LOG("Compiling scene...");
+    nova::Log("Compiling scene...");
 // -----------------------------------------------------------------------------
 
     nova::Ref<axiom::Renderer> renderer;
@@ -156,7 +342,7 @@ int main(int argc, char* argv[])
 
 // -----------------------------------------------------------------------------
     NOVA_TIMEIT("compile-scene");
-    NOVA_LOG("Setting up window...");
+    nova::Log("Setting up window...");
 // -----------------------------------------------------------------------------
 
     auto app = nova::Application::Create();
@@ -168,7 +354,7 @@ int main(int argc, char* argv[])
         .Show(true);
 
     auto swapchain = nova::Swapchain::Create(context,
-        window.NativeHandle(),
+        window,
         nova::ImageUsage::Storage
         | nova::ImageUsage::ColorAttach
         | nova::ImageUsage::TransferDst,
@@ -213,17 +399,18 @@ int main(int argc, char* argv[])
 
 // -----------------------------------------------------------------------------
     NOVA_TIMEIT("create-window");
-    NOVA_LOG("Rendering scene...");
+    nova::Log("Rendering scene...");
 // -----------------------------------------------------------------------------
 
-    Quat rotation;
+    Vec3 position = {};
+    Quat rotation = Quat(Vec3(0.f));
 
     // Bistro main
-    Vec3 position{ -4.84f, 5.64f, 12.8f };
-    rotation.x = -0.14f;
-    rotation.y =  0.16f;
-    rotation.z =  0.02f;
-    rotation.w =  0.98f;
+    // Vec3 position{ -4.84f, 5.64f, 12.8f };
+    // rotation.x = -0.14f;
+    // rotation.y =  0.16f;
+    // rotation.z =  0.02f;
+    // rotation.w =  0.98f;
 
     // Bistro bookshelf
     // Vec3 position{ 50.61f, 2.58f, 21.04f };
@@ -330,7 +517,7 @@ int main(int argc, char* argv[])
 
         // Camera
 
-        {
+        if (GetFocus() == (HWND)window.NativeHandle()) {
             Vec3 translate = {};
             if (app.IsVirtualKeyDown(nova::VirtualKey::W))         translate += Vec3( 0.f,  0.f, -1.f);
             if (app.IsVirtualKeyDown(nova::VirtualKey::A))         translate += Vec3(-1.f,  0.f,  0.f);

@@ -1,7 +1,5 @@
 #include "axiom_AssimpImporter.hpp"
 
-#include <nova/core/nova_Containers.hpp>
-
 namespace axiom
 {
     void AssimpImporter::Reset()
@@ -64,11 +62,11 @@ namespace axiom
         auto& in_texture = asset->mTextures[texture_index];
         auto& out_texture = scene.textures[texture_index];
 
-        NOVA_LOG("Texture[{}]: {}", texture_index, in_texture->mFilename.C_Str());
-        NOVA_LOG("  size = ({}, {})", in_texture->mWidth, in_texture->mHeight);
-        NOVA_LOG("  format hint: {:.9s}",  in_texture->achFormatHint);
-        NOVA_LOG("  texels: {}", (void*)in_texture->pcData);
-        NOVA_LOG("  magic: {:.4s}", (char*)in_texture->pcData);
+        nova::Log("Texture[{}]: {}", texture_index, in_texture->mFilename.C_Str());
+        nova::Log("  size = ({}, {})", in_texture->mWidth, in_texture->mHeight);
+        nova::Log("  format hint: {:.9s}",  in_texture->achFormatHint);
+        nova::Log("  texels: {}", (void*)in_texture->pcData);
+        nova::Log("  magic: {:.4s}", (char*)in_texture->pcData);
 
         if (in_texture->pcData) {
             if (in_texture->mHeight == 0) {
@@ -126,12 +124,12 @@ namespace axiom
         };
 
         {
-            NOVA_LOG("Material[{}]: {}", material_index, in_material->GetName().C_Str());
+            nova::Log("Material[{}]: {}", material_index, in_material->GetName().C_Str());
 
             auto DebugTexture = [&](aiTextureType type, const char* name) {
                 auto index = FindTexture({ type });
                 if (index) {
-                    NOVA_LOG("    {}: {}", name, index.value());
+                    nova::Log("    {}: {}", name, index.value());
                 }
             };
 
@@ -157,6 +155,9 @@ namespace axiom
             DebugTexture(aiTextureType_CLEARCOAT, "Clearcoat");
             DebugTexture(aiTextureType_TRANSMISSION, "Tranmission");
             DebugTexture(aiTextureType_UNKNOWN, "Unknown");
+
+aiTextureMapping mapmodeu;
+in_material->Get(AI_MATKEY_MAPPINGMODE_U_DIFFUSE(0), mapmodeu);
 
             std::unordered_map<std::string, int> property_indexes;
             for (uint32_t i = 0; i < in_material->mNumProperties; ++i) {
@@ -207,13 +208,13 @@ namespace axiom
         auto& out_mesh = scene.meshes[mesh_index];
 
         if (!in_mesh->HasPositions()) {
-            NOVA_LOG("Mesh [{}] has no positions, skipping...", in_mesh->mName.C_Str());
+            nova::Log("Mesh [{}] has no positions, skipping...", in_mesh->mName.C_Str());
             return;
         }
 
-        NOVA_LOG("Mesh[{}]: {}", mesh_index, in_mesh->mName.C_Str());
-        NOVA_LOG("  vertices = {}", in_mesh->mNumVertices);
-        NOVA_LOG("  faces: {}",  in_mesh->mNumFaces);
+        nova::Log("Mesh[{}]: {}", mesh_index, in_mesh->mName.C_Str());
+        nova::Log("  vertices = {}", in_mesh->mNumVertices);
+        nova::Log("  faces: {}",  in_mesh->mNumFaces);
 
         out_mesh.material_idx = in_mesh->mMaterialIndex;
 
@@ -234,7 +235,7 @@ namespace axiom
             out_mesh.indices.resize(safe_indices);
             for (u32 i = 0; i < safe_indices; ++i) {
                 out_mesh.indices[i] = i;
-                NOVA_LOGEXPR(i);
+                nova::Log(NOVA_FMTEXPR(i));
             }
         }
 

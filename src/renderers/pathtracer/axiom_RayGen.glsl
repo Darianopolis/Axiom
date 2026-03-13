@@ -92,7 +92,7 @@ void main()
     // float x = sin(yaw) * cos(pitch);
     // float y = -sin(pitch);
     // float z = -cos(yaw) * cos(pitch);
-    // mat3 tbn = mat3(pc.camX, pc.camY, focalcamZScaledPoint);
+    // mat3 tbn = mat3(pc.camX, pc.camY, camZScaled);
     // vec3 dir = tbn * vec3(x, y, z);
 
     // // Fisheye
@@ -107,7 +107,7 @@ void main()
 
     vec3 color      = vec3(0.0);
     vec3 throughput = vec3(1.0);
-    uint maxDepth   = 50;
+    uint maxDepth   = 7;
 
     const vec3  SunDir       = normalize(vec3(2, 4, 1));
     // const vec3  SunDir       = normalize(vec3(-1, 1, -1));
@@ -306,7 +306,7 @@ void main()
 // #define DEBUG_FLAT_TGT
 // #define DEBUG_VERT_NRM
 // #define DEBUG_NRM
-#define DEBUG_TGT
+// #define DEBUG_TGT
 // #define DEBUG_BARY
 // #define DEBUG_BASE
 // #define DEBUG_MRAO
@@ -338,7 +338,7 @@ void main()
             if (false)
 #endif
             {
-                color = Apply_sRGB_EOTF(color);
+                // color = Apply_sRGB_EOTF(color);
                 break;
             }
 // -----------------------------------------------------------------------------
@@ -441,15 +441,15 @@ void main()
                     // break;
                 }
             }
-             else {
-                 origin = OffsetPointByNormal(pos, -flatNrm);
+            else {
+                origin = OffsetPointByNormal(pos, -flatNrm);
 //                 throughput *= baseColor;
-                 float alpha = 0.85;
-                 float src_factor = alpha;
-                 float dst_factor = 1 - alpha;
-                 color = color * src_factor + baseColor * dst_factor;
-                 throughput *= alpha;
-             }
+                float alpha = 0.85;
+                float src_factor = alpha;
+                float dst_factor = 1 - alpha;
+                color = color * src_factor + baseColor * dst_factor;
+                throughput *= alpha;
+            }
         }
     }
 

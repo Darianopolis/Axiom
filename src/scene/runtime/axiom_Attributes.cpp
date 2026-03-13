@@ -4,9 +4,7 @@
 
 #include <stb_image.h>
 
-#include <base64.h>
-#include <nova/core/nova_Timer.hpp>
-#include <vulkan/vulkan_core.h>
+#include <nova/core/nova_Base64.hpp>
 
 namespace axiom
 {
@@ -42,18 +40,44 @@ namespace axiom
 // -----------------------------------------------------------------------------
 
         inline
-        Vec3 SignedOctDecode(Vec3 encoded)
+        Vec3 SignedOctDecode(i32 _x, i32 _y, i32 s, bool& choice)
         {
+            f32 x = f32(_x) / 1023.f;
+            f32 y = f32(_y) / 1023.f;
+
             Vec3 normal;
 
-            normal.x = (encoded.x - encoded.y);
-            normal.y = (encoded.x + encoded.y) - 1.f;
-            normal.z = encoded.z * 2.f - 1.f;
+            normal.x = (x - y);
+            normal.y = (x + y) - 1.f;
+            normal.z = s * 2.f - 1.f;
             normal.z = normal.z * (1.f - glm::abs(normal.x) - glm::abs(normal.y));
 
-            normal = glm::normalize(normal);
-            return normal;
+            choice = glm::abs(normal.y) > glm::abs(normal.z);
+
+            return glm::normalize(normal);
+
+            // Vec3I n;
+            // n.x = (x - y);
+            // n.y = (x + y) - 1023;
+            // n.z = (s * 2046) - 1023;
+            // n.z = n.z * (1023 - glm::abs(n.x) - glm::abs(n.y));
+
+            // choice = glm::abs(n.y) > glm::abs(n.z);
+
+            // return glm::normalize(Vec3(f32(n.x), f32(n.y), f32(n.z)) / 1023.f);
         }
+
+        // inline
+        // bool MakeDecodeChoice(i32 x, i32 y, i32 s)
+        // {
+        //     Vec3I n;
+        //     n.x = (x - y);
+        //     n.y = (x + y) - 1023;
+        //     n.z = (s * 2046) - 1023;
+        //     n.z = n.z * (1023 - glm::abs(n.x) - glm::abs(n.y));
+
+        //     return glm::abs(n.y) > glm::abs(n.z);
+        // }
 
 // -----------------------------------------------------------------------------
 //                              Encode Tangents
@@ -74,21 +98,22 @@ namespace axiom
         // Given a normal and tangent vector, encode the tangent as a single float that can be
         // subsequently quantized.
         inline
-        f32 EncodeTangent(Vec3 normal, Vec3 tangent, bool& choice)
+        f32 EncodeTangent(Vec3 normal, Vec3 tangent, bool choice)
         {
             // First, find a canonical direction in the tangent plane
             Vec3 t1;
-            if (glm::abs(normal.y) > glm::abs(normal.z))
+            // if (glm::abs(normal.y) > glm::abs(normal.z))
+            if (choice)
             {
                 // Pick a canonical direction orthogonal to n with z = 0
                 t1 = Vec3(normal.y, -normal.x, 0.f);
-                choice = true;
+                // choice = true;
             }
             else
             {
                 // Pick a canonical direction orthogonal to n with y = 0
                 t1 = Vec3(normal.z, 0.f, -normal.x);
-                choice = false;
+                // choice = false;
             }
             t1 = glm::normalize(t1);
 
@@ -148,12 +173,15 @@ namespace axiom
     void MeshProcessor::ProcessMesh(
         InStridedRegion           positions,
         InStridedRegion             normals,
+        InStridedRegion            tangents,
         InStridedRegion          tex_coords,
         InStridedRegion             indices,
         OutStridedRegion out_tangent_spaces,
         OutStridedRegion     out_tex_coords)
     {
         bool has_normals = normals.count;
+        bool has_tangents = tangents.count;
+        // bool has_tangents = false;
         bool has_tex_coords = tex_coords.count;
 
         // Update and clear scratch space
@@ -169,13 +197,21 @@ namespace axiom
             std::ranges::fill(vertex_tangent_spaces, TangentSpace{});
         }
 
+        if (has_tangents) {
+            for (u32 i = 0; i < tangents.count; ++i) {
+                vertex_tangent_spaces[i].tangent = tangents.Get<Vec4>(i);
+            }
+        }
+
         // Update normal, tangent, bitangent, and area for vertex
 
         auto update_normal_tangent = [&](u32 i, Vec3 normal, Vec3 tangent, Vec3 bitangent, f32 area) {
             if (!has_normals) {
                 vertex_tangent_spaces[i].normal += area * normal;
             }
-            vertex_tangent_spaces[i].tangent += area * tangent;
+            if (!has_tangents) {
+                vertex_tangent_spaces[i].tangent += area * tangent;
+            }
             vertex_tangent_spaces[i].bitangent += area * bitangent;
         };
 
@@ -248,21 +284,25 @@ namespace axiom
             GPU_TangentSpace ts;
 
             auto enc_normal = SignedOctEncode(tbn.normal);
-            ts.oct_x = u32(enc_normal.x * 1023.0);
-            ts.oct_y = u32(enc_normal.y * 1023.0);
+            ts.oct_x = u32(enc_normal.x * 1023.f);
+            ts.oct_y = u32(enc_normal.y * 1023.f);
+            // ts.oct_x = std::min(u32(enc_normal.x * 1024.f), 1023u);
+            // ts.oct_y = std::min(u32(enc_normal.y * 1024.f), 1023u);
             ts.oct_s = u32(enc_normal.z);
 
-            auto decode_normal = SignedOctDecode(Vec3(
-                f32(ts.oct_x) / 1023.f,
-                f32(ts.oct_y) / 1023.f,
-                f32(ts.oct_s)
-            ));
+            bool tgt_choice;
+            auto decode_normal = SignedOctDecode(
+                ts.oct_x,
+                ts.oct_y,
+                ts.oct_s,
+                tgt_choice);
+
+            // tgt_choice = MakeDecodeChoice(ts.oct_x, ts.oct_y, ts.oct_s);
 
             // auto decode_normal = tbn.normal;
 
             // Compute tangent angle based on DECODED normal to match shader computation
 
-            bool tgt_choice;
             auto enc_tangent = EncodeTangent(decode_normal, tbn.tangent, tgt_choice);
             ts.tgt_a = u32(enc_tangent * 1023.0);
             ts.tgt_s = u32(tgt_choice);
@@ -302,7 +342,7 @@ namespace axiom
         std::filesystem::path cached_path;
 
         if (!embedded_size) {
-            cached_name = base64_encode(std::string_view(path), true);
+            cached_name = nova::base64::EncodeToString(nova::Span((const b8*)path, strlen(path)), true, nova::base64::tables::URL);
             cached_name += std::format("${}${}${}", u32(processes), max_dim, u32(UseBC7));
             cached_path = std::filesystem::path("cache") / cached_name;
         }
@@ -328,7 +368,7 @@ namespace axiom
             return;
         }
 
-        NOVA_LOG("Image[{}] not cached, generating...", embedded_size ? "$embedded" : path);
+        nova::Log("Image[{}] not cached, generating...", embedded_size ? "$embedded" : path);
 
         i32 width, height, channels;
         stbi_uc* raw_data = nullptr;

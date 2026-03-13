@@ -114,7 +114,7 @@ namespace axiom
         }
 
 #ifdef AXIOM_TRACE_COMPILE // --------------------------------------------------
-        NOVA_LOG("Compiling, unique vertices = {}, unique indices = {}", vertex_count, index_count);
+        nova::Log("Compiling, unique vertices = {}, unique indices = {}", vertex_count, index_count);
 #endif // ----------------------------------------------------------------------
 
         position_attribute_buffer = nova::Buffer::Create(context,

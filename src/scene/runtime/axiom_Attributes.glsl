@@ -1,13 +1,30 @@
 struct axiom_TangentSpace { uint packed; };
 struct axiom_TexCoords    { uint packed; };
 
-vec3 axiom_SignedOctDecode(float x, float y, float s)
+// uint axiom_MakeDecodeChoice(int x, int y, int s)
+// {
+//     ivec3 n;
+//     n.x = (x - y);
+//     n.y = (x + y) - 1023;
+//     n.z = (s * 2046) - 1023;
+//     n.z = n.z * (1023 - abs(n.x) - abs(n.y));
+
+//     return uint(abs(n.y) > abs(n.z));
+// }
+
+vec3 axiom_SignedOctDecode(int _x, int _y, int _s, out uint choice)
 {
-    vec3 n;
+    precise float x = float(_x) / 1023.0;
+    precise float y = float(_y) / 1023.0;
+    precise float s = float(_s);
+
+    precise vec3 n;
     n.x = (x - y);
     n.y = (x + y) - 1.0;
     n.z = s * 2.0 - 1.0;
     n.z = n.z * (1.0 - abs(n.x) - abs(n.y));
+
+    choice = uint(abs(n.y) > abs(n.z));
 
     return normalize(n);
 }
@@ -47,15 +64,23 @@ vec3 axiom_DecodeTangent(vec3 normal, float diamondTangent, uint choice)
 
 void axiom_UnpackTangentSpace(axiom_TangentSpace ts, out vec3 normal, out vec3 tangent)
 {
+    uint choice;
     vec3 _normal = axiom_SignedOctDecode(
-        float(bitfieldExtract(ts.packed, 0, 10)) / 1023.0,
-        float(bitfieldExtract(ts.packed, 10, 10)) / 1023.0,
-        float(bitfieldExtract(ts.packed, 20, 1)));
+        int(bitfieldExtract(ts.packed, 0, 10)),
+        int(bitfieldExtract(ts.packed, 10, 10)),
+        int(bitfieldExtract(ts.packed, 20, 1)),
+        choice);
     normal = _normal;
+
+    // choice = axiom_MakeDecodeChoice(
+    //     int(bitfieldExtract(ts.packed, 0, 10)),
+    //     int(bitfieldExtract(ts.packed, 10, 10)),
+    //     int(bitfieldExtract(ts.packed, 20, 1)));
 
     tangent = axiom_DecodeTangent(_normal,
         float(bitfieldExtract(ts.packed, 21, 10)) / 1023.0,
-        bitfieldExtract(ts.packed, 31, 1));
+        choice);
+        // bitfieldExtract(ts.packed, 31, 1));
 }
 
 // float axiom_UnpackBitangentSign(axiom_TangentSpace ts)

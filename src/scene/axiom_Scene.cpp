@@ -1,16 +1,18 @@
 #include "axiom_Scene.hpp"
 
+#include <unordered_set>
+
 namespace axiom
 {
     void scene_ir::Scene::Debug()
     {
         auto WriteHeader = [&](std::string_view header) {
-            NOVA_LOG("\n{:=^80}\n", std::format(" {} ", header));
+            nova::Log("\n{:=^80}\n", std::format(" {} ", header));
         };
 
         WriteHeader("Overview");
 
-        NOVA_LOG("Textures = {}", textures.size());
+        nova::Log("Textures = {}", textures.size());
         {
             std::unordered_set<std::string_view> unique_paths;
             uint32_t raw_data_count = 0;
@@ -26,21 +28,21 @@ namespace axiom
                     raw_data_count++;
                 }
             }
-            NOVA_LOG("  Unique Files: {} ({} duplicates)", unique_paths.size(), duplicated_ids);
-            NOVA_LOG("  Buffers: {}", raw_data_count);
+            nova::Log("  Unique Files: {} ({} duplicates)", unique_paths.size(), duplicated_ids);
+            nova::Log("  Buffers: {}", raw_data_count);
         }
-        NOVA_LOG("Materials: {}", materials.size());
-        NOVA_LOG("Meshes: {}", meshes.size());
-        NOVA_LOG("Instances: {}", instances.size());
+        nova::Log("Materials: {}", materials.size());
+        nova::Log("Meshes: {}", meshes.size());
+        nova::Log("Instances: {}", instances.size());
 
         WriteHeader("Textures");
 
         for (auto& texture : textures) {
             std::cout << "Texture[" << (&texture - textures.data()) << "]";
             if (auto uri = std::get_if<ImageFileURI>(&texture.data)) {
-                NOVA_LOG(": File[{}]", uri->uri);
+                nova::Log(": File[{}]", uri->uri);
             } else if (auto file = std::get_if<ImageFileBuffer>(&texture.data)) {
-                NOVA_LOG(": InlineFile[magic = {}|{:#x}, size = {}]",
+                nova::Log(": InlineFile[magic = {}|{:#x}, size = {}]",
                     std::string_view(reinterpret_cast<char*>(file->data.data())).substr(0, 4),
                     *reinterpret_cast<uint32_t*>(file->data.data()),
                     file->data.size());
@@ -50,37 +52,37 @@ namespace axiom
                         using enum BufferFormat;
                     break;case RGBA8: format_name = "RGBA8";
                 }
-                NOVA_LOG(": Raw[size = ({}, {}), format = {}]", buffer->size.x, buffer->size.y, format_name);
+                nova::Log(": Raw[size = ({}, {}), format = {}]", buffer->size.x, buffer->size.y, format_name);
             }
         }
 
         WriteHeader("Materials");
 
         for (auto& material: materials) {
-            NOVA_LOG("Material[{}]", &material - materials.data());
+            nova::Log("Material[{}]", &material - materials.data());
             for (auto& property : material.properties) {
-                NOVA_LOG("  {}:", property.name);
+                nova::Log("  {}:", property.name);
                 std::visit(nova::Overloads {
                     [&](const TextureSwizzle& value) {
-                        NOVA_LOG("    Texture: {}", value.texture_idx);
+                        nova::Log("    Texture: {}", value.texture_idx);
                     },
                     [&](const bool& value) {
-                        NOVA_LOG("    Bool: {}", value);
+                        nova::Log("    Bool: {}", value);
                     },
                     [&](const i32& value) {
-                        NOVA_LOG("    Int: {}", value);
+                        nova::Log("    Int: {}", value);
                     },
                     [&](const f32& value) {
-                        NOVA_LOG("    Float: {}", value);
+                        nova::Log("    Float: {}", value);
                     },
                     [&](const Vec2& value) {
-                        NOVA_LOG("    Vec2: {}", glm::to_string(value));
+                        nova::Log("    Vec2: {}", glm::to_string(value));
                     },
                     [&](const Vec3& value) {
-                        NOVA_LOG("    Vec3: {}", glm::to_string(value));
+                        nova::Log("    Vec3: {}", glm::to_string(value));
                     },
                     [&](const Vec4& value) {
-                        NOVA_LOG("    Vec4: {}", glm::to_string(value));
+                        nova::Log("    Vec4: {}", glm::to_string(value));
                     },
                 }, property.value);
             }
@@ -89,13 +91,13 @@ namespace axiom
         WriteHeader("Instances");
 
         for (auto& instance : instances) {
-            NOVA_LOG("Instance[{}]", &instance - instances.data());
-            NOVA_LOG("  Mesh[{}]", instance.mesh_idx);
-            NOVA_LOG("  Transform:");
+            nova::Log("Instance[{}]", &instance - instances.data());
+            nova::Log("  Mesh[{}]", instance.mesh_idx);
+            nova::Log("  Transform:");
             auto& M = instance.transform;
-            NOVA_LOG("    {:12.5f} {:12.5f} {:12.5f} {:12.5f}", M[0][0], M[1][0], M[2][0], M[3][0]);
-            NOVA_LOG("    {:12.5f} {:12.5f} {:12.5f} {:12.5f}", M[0][1], M[1][1], M[2][1], M[3][1]);
-            NOVA_LOG("    {:12.5f} {:12.5f} {:12.5f} {:12.5f}", M[0][2], M[1][2], M[2][2], M[3][2]);
+            nova::Log("    {:12.5f} {:12.5f} {:12.5f} {:12.5f}", M[0][0], M[1][0], M[2][0], M[3][0]);
+            nova::Log("    {:12.5f} {:12.5f} {:12.5f} {:12.5f}", M[0][1], M[1][1], M[2][1], M[3][1]);
+            nova::Log("    {:12.5f} {:12.5f} {:12.5f} {:12.5f}", M[0][2], M[1][2], M[2][2], M[3][2]);
         }
     }
 }

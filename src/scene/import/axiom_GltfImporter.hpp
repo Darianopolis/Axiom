@@ -2,7 +2,11 @@
 
 #include <scene/axiom_Scene.hpp>
 
+#pragma warning(push)
+#pragma warning(disable : 4244)
+#pragma warning(disable : 4100)
 #include <fastgltf/core.hpp>
+#pragma warning(push)
 
 namespace axiom
 {

@@ -76,17 +76,17 @@ namespace axiom
         void DebugDump()
         {
             for (auto[mesh_idx, mesh] : meshes | std::views::enumerate) {
-                NOVA_LOG("Mesh[{}]", mesh_idx);
-                NOVA_LOGEXPR(mesh->indices.size());
-                NOVA_LOGEXPR(mesh->shading_attributes.size());
-                NOVA_LOGEXPR(mesh->position_attributes.size());
-                NOVA_LOGEXPR(mesh->sub_meshes.size());
+                nova::Log("Mesh[{}]", mesh_idx);
+                nova::Log(NOVA_FMTEXPR(mesh->indices.size()));
+                nova::Log(NOVA_FMTEXPR(mesh->shading_attributes.size()));
+                nova::Log(NOVA_FMTEXPR(mesh->position_attributes.size()));
+                nova::Log(NOVA_FMTEXPR(mesh->sub_meshes.size()));
                 for (auto[sub_mesh_idx, sub_mesh] : mesh->sub_meshes | std::views::enumerate) {
-                    NOVA_LOG("Submesh[{}]", sub_mesh_idx);
-                    NOVA_LOGEXPR(sub_mesh.vertex_offset);
-                    NOVA_LOGEXPR(sub_mesh.max_vertex);
-                    NOVA_LOGEXPR(sub_mesh.first_index);
-                    NOVA_LOGEXPR(sub_mesh.index_count);
+                    nova::Log("Submesh[{}]", sub_mesh_idx);
+                    nova::Log(NOVA_FMTEXPR(sub_mesh.vertex_offset));
+                    nova::Log(NOVA_FMTEXPR(sub_mesh.max_vertex));
+                    nova::Log(NOVA_FMTEXPR(sub_mesh.first_index));
+                    nova::Log(NOVA_FMTEXPR(sub_mesh.index_count));
                 }
             }
         }

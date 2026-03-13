@@ -3,8 +3,11 @@ if Project "axiom" then
     Include "src"
     Import {
         "nova",
-        "base64",
-        --"imp",
+        "nova-glsl",
+        "fastgltf",
+        "ufbx",
+        "assimp",
+        "fast-obj",
     }
 end
 

@@ -105,6 +105,7 @@ namespace axiom
         void ProcessMesh(
              InStridedRegion       in_positions,
              InStridedRegion         in_normals,
+             InStridedRegion        in_tangents,
              InStridedRegion      in_tex_coords,
              InStridedRegion         in_indices,
             OutStridedRegion out_tangent_spaces,
